@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { AdminView } from "./AdminView";
+import { useAuth } from "./AuthContext";
+import { LoginView } from "./LoginView";
 import { apiGet, apiGetOrNull, apiPost } from "./lib/api";
 import { loadPickCriteria, type PickCriteria, universeLabel } from "./pickCriteria";
 import { SettingsView } from "./SettingsView";
@@ -68,7 +71,8 @@ function formatMoney(n: number) {
 }
 
 export default function App() {
-  const [page, setPage] = useState<"main" | "settings">("main");
+  const { ready, authRequired, user, err: authErr, logout } = useAuth();
+  const [page, setPage] = useState<"main" | "settings" | "admin">("main");
   const [pickCriteria, setPickCriteria] = useState<PickCriteria>(() => loadPickCriteria());
   const [universeRefresh, setUniverseRefresh] = useState(() => loadPickCriteria().universe_id);
   const [profile, setProfile] = useState("default");
@@ -140,6 +144,34 @@ export default function App() {
     setUniverseRefresh(pickCriteria.universe_id);
   }, [pickCriteria.universe_id]);
 
+  useEffect(() => {
+    if (page === "admin" && !user?.is_admin) setPage("main");
+  }, [page, user?.is_admin]);
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-slate-400">
+        Loading…
+      </div>
+    );
+  }
+
+  if (authErr) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center text-red-200">
+        <p>{authErr}</p>
+      </div>
+    );
+  }
+
+  if (authRequired && !user) {
+    return <LoginView />;
+  }
+
+  if (page === "admin" && user?.is_admin) {
+    return <AdminView onBack={() => setPage("main")} />;
+  }
+
   if (page === "settings") {
     return (
       <SettingsView
@@ -169,6 +201,23 @@ export default function App() {
           </p>
         </div>
         <div className="glass flex flex-col gap-3 p-4 sm:min-w-[240px]">
+          {authRequired && user && (
+            <p className="text-center text-xs text-slate-500">
+              <span className="font-mono text-slate-300">{user.user_id}</span>
+              {user.is_admin && (
+                <span className="ml-2 rounded bg-mint-500/20 px-1.5 py-0.5 text-mint-400">admin</span>
+              )}
+            </p>
+          )}
+          {user?.is_admin && (
+            <button
+              type="button"
+              className="btn-ghost w-full justify-center text-sm"
+              onClick={() => setPage("admin")}
+            >
+              Admin — users
+            </button>
+          )}
           <button
             type="button"
             className="btn-ghost w-full justify-center text-sm"
@@ -176,6 +225,11 @@ export default function App() {
           >
             Daily pick criteria
           </button>
+          {authRequired && (
+            <button type="button" className="btn-ghost w-full justify-center text-xs" onClick={logout}>
+              Sign out
+            </button>
+          )}
           <div>
             <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Simulation profile

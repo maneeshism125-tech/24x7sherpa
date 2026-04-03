@@ -112,3 +112,53 @@ class DailyRecommendationsResponse(BaseModel):
     universe_cap: int
     candidates_scored: int
     criteria: dict
+
+
+class CurrentUser(BaseModel):
+    user_id: str
+    is_admin: bool
+
+
+class AuthConfigResponse(BaseModel):
+    auth_required: bool
+
+
+class LoginBody(BaseModel):
+    user_id: str = Field(..., min_length=3, max_length=32)
+    password: str = Field(..., min_length=1, max_length=256)
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class MeResponse(BaseModel):
+    user_id: str
+    is_admin: bool
+
+
+class UserAdminRow(BaseModel):
+    user_id: str
+    is_admin: bool
+    disabled: bool
+    created_at: float
+
+
+class AdminCreateUserBody(BaseModel):
+    user_id: str = Field(
+        ...,
+        min_length=3,
+        max_length=32,
+        pattern=r"^[a-zA-Z0-9_]+$",
+        description="Letters, digits, underscore only",
+    )
+    password: str = Field(..., min_length=8, max_length=256)
+    is_admin: bool = False
+
+
+class AdminPatchUserBody(BaseModel):
+    password: str | None = Field(None, min_length=8, max_length=256)
+    is_admin: bool | None = None
+    disabled: bool | None = None

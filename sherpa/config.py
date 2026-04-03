@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # sherpa/config.py -> repo root (works for editable install; wheel falls back to cwd)
@@ -45,6 +45,34 @@ class Settings(BaseSettings):
     max_position_pct_nav: float = Field(default=0.05, ge=0, le=1)
     max_daily_loss_pct: float = Field(default=0.02, ge=0, le=1)
     default_slippage_bps: float = Field(default=5.0, ge=0)
+
+    # Multi-user auth (SQLite under data_dir). Set SHERPA_AUTH_DISABLED=1 to skip login locally.
+    auth_disabled: bool = Field(default=False, validation_alias="SHERPA_AUTH_DISABLED")
+    jwt_secret: str = Field(
+        default="dev-change-SHERPA_JWT_SECRET",
+        validation_alias="SHERPA_JWT_SECRET",
+        description="HS256 signing secret; required for production.",
+    )
+    jwt_expire_hours: int = Field(default=168, ge=1, le=8760, validation_alias="SHERPA_JWT_EXPIRE_HOURS")
+    bootstrap_admin_password: str | None = Field(
+        default=None,
+        validation_alias="SHERPA_BOOTSTRAP_ADMIN_PASSWORD",
+        description="If set and DB has no users, create admin user 'admin' with this password.",
+    )
+
+    @field_validator("auth_disabled", mode="before")
+    @classmethod
+    def _coerce_auth_disabled(cls, v: object) -> bool:
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        s = str(v).strip().lower()
+        if s in ("", "0", "false", "no", "off"):
+            return False
+        if s in ("1", "true", "yes", "on"):
+            return True
+        raise ValueError(f"Invalid boolean for auth_disabled: {v!r}")
 
 
 def get_settings() -> Settings:

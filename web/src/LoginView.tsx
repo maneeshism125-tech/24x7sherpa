@@ -1,0 +1,72 @@
+import { useState } from "react";
+import { useAuth } from "./AuthContext";
+
+export function LoginView() {
+  const { login } = useAuth();
+  const [userId, setUserId] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center px-4">
+      <div className="glass w-full max-w-md p-8">
+        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
+          24×7 Sherpa
+        </p>
+        <h1 className="font-display mt-2 text-2xl font-bold text-white">Sign in</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          Use the user id and password from your administrator. First deploy creates{" "}
+          <code className="text-slate-300">admin</code> / <code className="text-slate-300">changeme</code>{" "}
+          unless <code className="text-slate-300">SHERPA_BOOTSTRAP_ADMIN_PASSWORD</code> is set.
+        </p>
+        {err && (
+          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+            {err}
+          </p>
+        )}
+        <form
+          className="mt-6 space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setErr(null);
+            setBusy(true);
+            try {
+              await login(userId, password);
+            } catch (ex) {
+              setErr(ex instanceof Error ? ex.message : String(ex));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">User id</label>
+            <input
+              className="input font-mono"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              autoComplete="username"
+              spellCheck={false}
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Password</label>
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          <button type="submit" className="btn-primary w-full" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

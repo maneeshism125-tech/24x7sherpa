@@ -7,6 +7,8 @@ __pycache__/
 .ruff_cache/
 .env
 data/*.txt
+data/*.sqlite
+data/*.sqlite-journal
 data/paper_portfolio.json
 data/simulations/
 !data/.gitkeep

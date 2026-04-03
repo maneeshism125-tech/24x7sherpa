@@ -86,7 +86,12 @@ class DailyPickRow(BaseModel):
 class PickCriteriaBody(BaseModel):
     """All fields optional; omitted values use server defaults (see PickCriteria)."""
 
-    universe_cap: int | None = Field(None, ge=20, le=503)
+    universe_id: str | None = Field(
+        None,
+        max_length=32,
+        description="sp500 | dow | nasdaq100 (QQQ) | nasdaq (Nasdaq-listed) | russell2000",
+    )
+    universe_cap: int | None = Field(None, ge=20, le=3500)
     pick_count: int | None = Field(None, ge=1, le=25)
     skip_news: bool | None = None
     min_bars: int | None = Field(None, ge=200, le=400)

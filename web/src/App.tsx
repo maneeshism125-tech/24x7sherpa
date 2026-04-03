@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiGetOrNull, apiPost } from "./lib/api";
-import { loadPickCriteria, type PickCriteria } from "./pickCriteria";
+import { loadPickCriteria, type PickCriteria, universeLabel } from "./pickCriteria";
 import { SettingsView } from "./SettingsView";
 
 const LS_PROFILE = "sherpa_sim_profile";
@@ -70,6 +70,7 @@ function formatMoney(n: number) {
 export default function App() {
   const [page, setPage] = useState<"main" | "settings">("main");
   const [pickCriteria, setPickCriteria] = useState<PickCriteria>(() => loadPickCriteria());
+  const [universeRefresh, setUniverseRefresh] = useState(() => loadPickCriteria().universe_id);
   const [profile, setProfile] = useState("default");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -134,6 +135,10 @@ export default function App() {
     void loadStatus().catch(() => setSim(null));
     void loadAccount().catch(() => setAcct(null));
   }, [loadAccount, loadStatus]);
+
+  useEffect(() => {
+    setUniverseRefresh(pickCriteria.universe_id);
+  }, [pickCriteria.universe_id]);
 
   if (page === "settings") {
     return (
@@ -456,7 +461,8 @@ export default function App() {
                 >
                   criteria
                 </button>
-                : first <strong>{pickCriteria.universe_cap}</strong> S&amp;P names, top{" "}
+                : <strong>{universeLabel(pickCriteria.universe_id)}</strong> — first{" "}
+                <strong>{pickCriteria.universe_cap}</strong> symbols, top{" "}
                 <strong>{pickCriteria.pick_count}</strong> after filters
                 {pickCriteria.require_above_sma200 ? (
                   <>
@@ -559,21 +565,41 @@ export default function App() {
         <section className="glass p-6 lg:col-span-2">
           <h2 className="font-display text-lg font-semibold text-white">Data</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Refresh the S&amp;P 500 ticker list from Wikipedia (cached on the server).
+            Re-download the ticker list for an index (Wikipedia, Nasdaq Trader, or a third-party Russell table —
+            cached under the API data directory). Russell 2000 needs a successful refresh before daily picks.
           </p>
-          <button
-            type="button"
-            className="btn-ghost mt-4"
-            disabled={busy !== null}
-            onClick={() =>
-              run("universe", async () => {
-                const r = await apiPost<{ tickers_cached: number }>("/api/universe/refresh");
-                alert(`Cached ${r.tickers_cached} tickers.`);
-              })
-            }
-          >
-            {busy === "universe" ? "Refreshing…" : "Refresh S&amp;P 500 universe"}
-          </button>
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Universe to refresh</label>
+              <select
+                className="input min-w-[220px]"
+                value={universeRefresh}
+                onChange={(e) => setUniverseRefresh(e.target.value as PickCriteria["universe_id"])}
+              >
+                <option value="sp500">S&amp;P 500</option>
+                <option value="dow">Dow Jones (DJIA)</option>
+                <option value="nasdaq100">Nasdaq-100 (QQQ)</option>
+                <option value="nasdaq">Nasdaq-listed stocks</option>
+                <option value="russell2000">Russell 2000</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={busy !== null}
+              onClick={() =>
+                run("universe", async () => {
+                  const q = new URLSearchParams({ universe: universeRefresh });
+                  const r = await apiPost<{ tickers_cached: number; universe: string }>(
+                    `/api/universe/refresh?${q}`,
+                  );
+                  alert(`Universe ${r.universe}: cached ${r.tickers_cached} tickers.`);
+                })
+              }
+            >
+              {busy === "universe" ? "Refreshing…" : "Refresh ticker cache"}
+            </button>
+          </div>
         </section>
       </div>
 

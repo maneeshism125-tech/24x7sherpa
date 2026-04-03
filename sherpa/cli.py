@@ -23,7 +23,8 @@ from sherpa.recommendations.criteria import PickCriteria
 from sherpa.recommendations.daily import run_daily_picks
 from sherpa.signals.engine import Side, SignalEngine
 from sherpa.technical.indicators import compute_features
-from sherpa.universe.sp500 import get_sp500_tickers, refresh_sp500_cache
+from sherpa.universe.indices import normalize_universe_id, refresh_universe_cache
+from sherpa.universe.sp500 import get_sp500_tickers
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,10 +35,18 @@ app.add_typer(simulate_app, name="simulate", help="Fake-money sandbox (per-profi
 
 
 @app.command("universe-refresh")
-def universe_refresh() -> None:
-    """Download S&P 500 tickers from Wikipedia into data/sp500_tickers.txt."""
-    tickers = refresh_sp500_cache()
-    typer.echo(f"Cached {len(tickers)} tickers.")
+def universe_refresh(
+    universe: str = typer.Option(
+        "sp500",
+        "--universe",
+        "-u",
+        help="sp500 | dow | nasdaq100 | nasdaq | russell2000",
+    ),
+) -> None:
+    """Download ticker list for a universe into the server data directory (cache)."""
+    uid = normalize_universe_id(universe)
+    n = refresh_universe_cache(uid)
+    typer.echo(f"Cached {n} tickers for universe={uid}.")
 
 
 @app.command("scan")
@@ -71,18 +80,31 @@ def scan(
 
 @app.command("daily-picks")
 def daily_picks(
-    universe: int = typer.Option(150, help="How many S&P 500 names to score (time/cost)."),
+    universe_cap: int = typer.Option(
+        150,
+        "--universe-cap",
+        "-n",
+        help="How many symbols to score from the chosen list (time/cost).",
+    ),
     picks: int = typer.Option(10, help="How many top names to print."),
+    universe_id: str = typer.Option(
+        "sp500",
+        "--universe",
+        "-u",
+        help="sp500 | dow | nasdaq100 | nasdaq | russell2000",
+    ),
     skip_news: bool = typer.Option(False, help="Skip headlines (faster)."),
     min_volume: float = typer.Option(
         200_000,
         help="Minimum last-session volume (shares).",
     ),
 ) -> None:
-    """Rank S&P names above SMA(200) with volume filter; SMA/RSI/ATR + headline rules — not advice."""
+    """Rank names from a US index list; SMA/RSI/ATR + headline rules — not advice."""
     settings = get_settings()
+    uid = normalize_universe_id(universe_id)
     cr = PickCriteria(
-        universe_cap=universe,
+        universe_id=uid,
+        universe_cap=universe_cap,
         pick_count=picks,
         skip_news=skip_news,
         min_volume=min_volume,
@@ -91,7 +113,7 @@ def daily_picks(
     typer.echo(disc)
     filt = "close>SMA200, " if cr.require_above_sma200 else ""
     typer.echo(
-        f"Scored {scored} symbols ({filt}vol>{min_volume:,.0f}) from first {universe} tickers.\n"
+        f"Scored {scored} symbols ({filt}vol>{min_volume:,.0f}) from first {universe_cap} of {uid}.\n"
     )
     for i, p in enumerate(out, 1):
         r = " · ".join(p.reasons[:6])

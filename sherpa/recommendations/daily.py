@@ -1,5 +1,5 @@
 """
-Rule-based daily ranking of S&P 500 names (technicals + headlines).
+Rule-based daily ranking of US equity names (technicals + headlines).
 
 This is not investment advice and does not predict returns (including +1% days).
 """
@@ -16,7 +16,7 @@ from sherpa.providers.base import NewsItem
 from sherpa.recommendations.criteria import PickCriteria
 from sherpa.signals.engine import NEGATIVE_NEWS_KEYWORDS
 from sherpa.technical.indicators import compute_features
-from sherpa.universe.sp500 import get_sp500_tickers
+from sherpa.universe.indices import get_universe_tickers
 
 DISCLAIMER = (
     "Educational ranking only. Past patterns and headlines do not predict future prices "
@@ -176,13 +176,13 @@ def run_daily_picks(
     criteria: PickCriteria | None = None,
 ) -> tuple[list[DailyPick], str, int]:
     """
-    Rank S&P 500 symbols using ``criteria`` (filters + scoring).
+    Rank symbols from ``criteria.universe_id`` using filters + scoring.
     """
     cr = criteria or PickCriteria()
     s = settings or get_settings()
     prices = create_price_provider(s)
     news_p = create_news_provider(s)
-    tickers = get_sp500_tickers()[: cr.universe_cap]
+    tickers = get_universe_tickers(cr.universe_id)[: cr.universe_cap]
 
     need_days = max(400, cr.min_bars + 80)
 

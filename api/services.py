@@ -13,7 +13,8 @@ from sherpa.execution.simulation_paths import simulation_portfolio_path, simulat
 from sherpa.providers import create_news_provider, create_price_provider
 from sherpa.signals.engine import Side, SignalEngine
 from sherpa.technical.indicators import compute_features
-from sherpa.universe.sp500 import get_sp500_tickers, refresh_sp500_cache
+from sherpa.universe.indices import refresh_universe_cache
+from sherpa.universe.sp500 import get_sp500_tickers
 
 from api.schemas import (
     AccountResponse,
@@ -30,8 +31,12 @@ from api.schemas import (
 logger = logging.getLogger(__name__)
 
 
-def service_universe_refresh() -> int:
-    return len(refresh_sp500_cache())
+def service_universe_refresh(*, universe: str = "sp500") -> dict:
+    from sherpa.universe.indices import normalize_universe_id
+
+    uid = normalize_universe_id(universe)
+    n = refresh_universe_cache(uid)
+    return {"universe": uid, "tickers_cached": n}
 
 
 def service_scan(*, top: int, skip_news: bool) -> ScanResponse:

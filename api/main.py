@@ -65,9 +65,14 @@ def api_health() -> dict:
 
 
 @app.post("/api/universe/refresh")
-async def api_universe_refresh() -> dict:
-    n = await asyncio.to_thread(services.service_universe_refresh)
-    return {"tickers_cached": n}
+async def api_universe_refresh(
+    universe: str = Query(
+        "sp500",
+        max_length=32,
+        description="sp500 | dow | nasdaq100 | nasdaq | russell2000",
+    ),
+) -> dict:
+    return await asyncio.to_thread(services.service_universe_refresh, universe=universe)
 
 
 @app.get("/api/scan", response_model=ScanResponse)
@@ -86,7 +91,12 @@ async def api_scan(
 
 @app.get("/api/recommendations/daily", response_model=DailyRecommendationsResponse)
 async def api_daily_recommendations(
-    universe_cap: int = Query(150, ge=20, le=503, description="S&P names to score"),
+    universe_id: str | None = Query(
+        None,
+        max_length=32,
+        description="sp500 | dow | nasdaq100 | nasdaq | russell2000",
+    ),
+    universe_cap: int = Query(150, ge=20, le=3500, description="First N symbols from chosen list"),
     pick_count: int = Query(10, ge=1, le=25),
     skip_news: bool = False,
     min_bars: int = Query(200, ge=200, le=400, description="Need 200+ for SMA(200)"),
@@ -99,6 +109,7 @@ async def api_daily_recommendations(
 ) -> DailyRecommendationsResponse:
     try:
         body = PickCriteriaBody(
+            universe_id=universe_id,
             universe_cap=universe_cap,
             pick_count=pick_count,
             skip_news=skip_news,

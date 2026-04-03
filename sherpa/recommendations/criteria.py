@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
 
+from sherpa.universe.indices import normalize_universe_id
+
 
 @dataclass(frozen=True)
 class PickCriteria:
+    universe_id: str = "sp500"
     universe_cap: int = 150
     pick_count: int = 10
     skip_news: bool = False
@@ -32,4 +35,7 @@ class PickCriteria:
         for k, v in data.items():
             if k in keys and v is not None:
                 merged[k] = v
+        merged["universe_id"] = normalize_universe_id(
+            str(merged["universe_id"]) if merged.get("universe_id") is not None else None
+        )
         return cls(**merged)

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { PickCriteria } from "./pickCriteria";
-import { DEFAULT_PICK_CRITERIA, savePickCriteria } from "./pickCriteria";
+import { DEFAULT_PICK_CRITERIA, savePickCriteria, UNIVERSE_OPTIONS } from "./pickCriteria";
 
 type Props = {
   criteria: PickCriteria;
@@ -35,12 +35,25 @@ export function SettingsView({ criteria, onSave, onCancel }: Props) {
         <section>
           <h2 className="font-display text-base font-semibold text-white">Universe &amp; output</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field label="Symbols to score (first N of S&amp;P 500)">
+            <Field label="Index / exchange list">
+              <select
+                className="input"
+                value={c.universe_id}
+                onChange={(e) => set("universe_id")(e.target.value as PickCriteria["universe_id"])}
+              >
+                {UNIVERSE_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Symbols to score (first N from that list)">
               <input
                 className="input"
                 type="number"
                 min={20}
-                max={503}
+                max={3500}
                 value={c.universe_cap}
                 onChange={(e) => set("universe_cap")(parseInt(e.target.value, 10) || 20)}
               />

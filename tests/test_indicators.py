@@ -25,7 +25,18 @@ def test_compute_features_has_columns() -> None:
     bars = _bars_uptrend(60)
     df = compute_features(bars)
     assert not df.empty
+    assert "sma_5" in df.columns
+    assert "sma_10" in df.columns
     assert "sma_20" in df.columns
     assert "rsi_14" in df.columns
     last = df.iloc[-1]
     assert not pd.isna(last["sma_20"])
+    assert not pd.isna(last["sma_5"])
+
+
+def test_compute_features_sma_200() -> None:
+    bars = _bars_uptrend(220)
+    df = compute_features(bars)
+    assert "sma_200" in df.columns
+    last = df.iloc[-1]
+    assert not pd.isna(last["sma_200"])

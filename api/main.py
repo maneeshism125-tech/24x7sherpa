@@ -16,6 +16,7 @@ from sherpa.config import get_settings
 from api import services
 from api.schemas import (
     AccountResponse,
+    DailyRecommendationsResponse,
     ScanResponse,
     SimulateResetBody,
     SimulationStatusResponse,
@@ -79,6 +80,33 @@ async def api_scan(
         )
     except Exception as e:
         logger.exception("scan failed")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/api/recommendations/daily", response_model=DailyRecommendationsResponse)
+async def api_daily_recommendations(
+    universe_cap: int = Query(150, ge=20, le=503, description="S&P names to score"),
+    pick_count: int = Query(10, ge=1, le=25),
+    skip_news: bool = False,
+    min_bars: int = Query(200, ge=200, le=400, description="Need 200+ for SMA(200)"),
+    min_volume: float = Query(
+        200_000,
+        ge=0,
+        le=50_000_000,
+        description="Min last-session share volume",
+    ),
+) -> DailyRecommendationsResponse:
+    try:
+        return await asyncio.to_thread(
+            services.service_daily_recommendations,
+            universe_cap=universe_cap,
+            pick_count=pick_count,
+            skip_news=skip_news,
+            min_bars=min_bars,
+            min_volume=min_volume,
+        )
+    except Exception as e:
+        logger.exception("daily recommendations failed")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

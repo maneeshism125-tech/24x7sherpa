@@ -66,3 +66,25 @@ class TradeResponse(BaseModel):
 class ScanResponse(BaseModel):
     signals: list[SignalRow]
     scanned: int
+
+
+class DailyPickRow(BaseModel):
+    symbol: str
+    score: float
+    reasons: list[str]
+    last_close: float | None = None
+    sma5: float | None = None
+    sma10: float | None = None
+    sma200: float | None = None
+    rsi: float | None = None
+    atr_pct: float | None = None
+    volume_last: float | None = None
+    target_buy_price: float | None = None
+    target_sell_price: float | None = None
+
+
+class DailyRecommendationsResponse(BaseModel):
+    picks: list[DailyPickRow]
+    disclaimer: str
+    universe_cap: int
+    candidates_scored: int

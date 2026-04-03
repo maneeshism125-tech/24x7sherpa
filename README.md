@@ -77,6 +77,10 @@ sherpa scan --top 25
 # Faster scan without news
 sherpa scan --top 50 --skip-news
 
+# Daily top 10-style rank: must be above SMA(200), last volume > 200k shares; ATR-based buy/sell hints
+sherpa daily-picks --universe 150 --picks 10
+sherpa daily-picks --skip-news --min-volume 500000
+
 # Paper trade (uses last Yahoo close + slippage bps from settings)
 sherpa trade AAPL buy 1 --broker paper
 
@@ -99,6 +103,7 @@ Paper trades persist under `data/simulations/<profile>/portfolio.json` (gitignor
 - `sherpa/providers` — `PriceProvider` / `NewsProvider` (swap Yahoo → Polygon/IEX later).
 - `sherpa/technical` — indicators on `Bar` series.
 - `sherpa/signals` — pluggable rules (replace with your models).
+- `sherpa/recommendations` — `daily-picks` / `/api/recommendations/daily` technical + headline ranking (not advice).
 - `sherpa/risk` — position sizing and daily loss gate.
 - `sherpa/execution` — `PaperBroker`, `AlpacaBroker`, shared `BrokerClient` shape for more brokers.
 - `api/` — HTTP API for the dashboard; `web/` — Vite + React UI.

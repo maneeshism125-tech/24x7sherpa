@@ -17,6 +17,8 @@ from sherpa.universe.sp500 import get_sp500_tickers, refresh_sp500_cache
 
 from api.schemas import (
     AccountResponse,
+    DailyPickRow,
+    DailyRecommendationsResponse,
     PositionRow,
     ScanResponse,
     SignalRow,
@@ -133,4 +135,48 @@ def service_trade_paper(*, symbol: str, side: str, qty: int, profile: str) -> Tr
         filled_qty=res.filled_qty,
         avg_fill_price=res.avg_fill_price,
         symbol=sym,
+    )
+
+
+def service_daily_recommendations(
+    *,
+    universe_cap: int,
+    pick_count: int,
+    skip_news: bool,
+    min_bars: int,
+    min_volume: float,
+) -> DailyRecommendationsResponse:
+    from sherpa.config import get_settings
+    from sherpa.recommendations.daily import run_daily_picks
+
+    picks, disclaimer, scored = run_daily_picks(
+        get_settings(),
+        universe_cap=universe_cap,
+        pick_count=pick_count,
+        skip_news=skip_news,
+        min_bars=min_bars,
+        min_volume=min_volume,
+    )
+    rows = [
+        DailyPickRow(
+            symbol=p.symbol,
+            score=p.score,
+            reasons=list(p.reasons),
+            last_close=p.last_close,
+            sma5=p.sma5,
+            sma10=p.sma10,
+            sma200=p.sma200,
+            rsi=p.rsi,
+            atr_pct=p.atr_pct,
+            volume_last=p.volume_last,
+            target_buy_price=p.target_buy_price,
+            target_sell_price=p.target_sell_price,
+        )
+        for p in picks
+    ]
+    return DailyRecommendationsResponse(
+        picks=rows,
+        disclaimer=disclaimer,
+        universe_cap=universe_cap,
+        candidates_scored=scored,
     )

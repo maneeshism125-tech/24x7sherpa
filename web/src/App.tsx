@@ -35,6 +35,28 @@ type SignalRow = {
 
 type ScanResult = { signals: SignalRow[]; scanned: number };
 
+type DailyPickRow = {
+  symbol: string;
+  score: number;
+  reasons: string[];
+  last_close: number | null;
+  sma5: number | null;
+  sma10: number | null;
+  sma200: number | null;
+  rsi: number | null;
+  atr_pct: number | null;
+  volume_last: number | null;
+  target_buy_price: number | null;
+  target_sell_price: number | null;
+};
+
+type DailyRecResult = {
+  picks: DailyPickRow[];
+  disclaimer: string;
+  universe_cap: number;
+  candidates_scored: number;
+};
+
 function formatMoney(n: number) {
   return n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -49,6 +71,7 @@ export default function App() {
   const [sim, setSim] = useState<SimStatus | null>(null);
   const [acct, setAcct] = useState<Account | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
+  const [dailyRec, setDailyRec] = useState<DailyRecResult | null>(null);
 
   const [resetCash, setResetCash] = useState("100000");
   const [tradeSym, setTradeSym] = useState("AAPL");
@@ -56,6 +79,9 @@ export default function App() {
   const [tradeQty, setTradeQty] = useState("1");
   const [scanTop, setScanTop] = useState("15");
   const [scanSkipNews, setScanSkipNews] = useState(false);
+  const [pickUniverse, setPickUniverse] = useState("120");
+  const [pickCount, setPickCount] = useState("10");
+  const [pickSkipNews, setPickSkipNews] = useState(false);
 
   useEffect(() => {
     try {
@@ -390,6 +416,130 @@ export default function App() {
           )}
           {scan && scan.signals.length === 0 && (
             <p className="mt-6 text-sm text-slate-500">No signals this run — try more symbols or another day.</p>
+          )}
+        </section>
+
+        <section className="glass p-6 lg:col-span-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-white">Daily technical rank (top 10)</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Only names with <strong>close &gt; SMA(200)</strong> and <strong>last volume &gt; 200k</strong> shares.
+                Suggested buy/sell are ATR/SMA heuristics (illustrative). Not a forecast or advice.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={pickSkipNews}
+                  onChange={(e) => setPickSkipNews(e.target.checked)}
+                  className="rounded border-white/20 bg-night-850 text-mint-500"
+                />
+                Skip news
+              </label>
+              <input
+                className="input w-24"
+                value={pickUniverse}
+                onChange={(e) => setPickUniverse(e.target.value)}
+                inputMode="numeric"
+                aria-label="Universe size"
+                title="Symbols to score"
+              />
+              <input
+                className="input w-16"
+                value={pickCount}
+                onChange={(e) => setPickCount(e.target.value)}
+                inputMode="numeric"
+                aria-label="Pick count"
+              />
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={busy !== null}
+                onClick={() =>
+                  run("picks", async () => {
+                    const cap = Math.min(503, Math.max(20, parseInt(pickUniverse, 10) || 120));
+                    const pc = Math.min(25, Math.max(1, parseInt(pickCount, 10) || 10));
+                    const q = new URLSearchParams({
+                      universe_cap: String(cap),
+                      pick_count: String(pc),
+                      skip_news: String(pickSkipNews),
+                      min_bars: "200",
+                      min_volume: "200000",
+                    });
+                    const data = await apiGet<DailyRecResult>(`/api/recommendations/daily?${q}`);
+                    setDailyRec(data);
+                  })
+                }
+              >
+                {busy === "picks" ? "Running…" : "Get daily picks"}
+              </button>
+            </div>
+          </div>
+          {dailyRec && (
+            <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/90">
+              {dailyRec.disclaimer}
+            </p>
+          )}
+          {dailyRec && (
+            <p className="mt-2 text-xs text-slate-500">
+              Scored {dailyRec.candidates_scored} candidates from universe cap {dailyRec.universe_cap}.
+            </p>
+          )}
+          {dailyRec && dailyRec.picks.length > 0 && (
+            <p className="mt-2 text-xs text-slate-600">
+              *Suggested buy ≈ pullback above SMA(200); suggested sell ≈ last close + 1×ATR (capped). Not limit/stop
+              advice.
+            </p>
+          )}
+          {dailyRec && dailyRec.picks.length > 0 && (
+            <div className="mt-4 max-h-96 overflow-auto rounded-xl border border-white/10">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-night-900">
+                  <tr className="border-b border-white/10 text-slate-500">
+                    <th className="px-4 py-2 font-medium">#</th>
+                    <th className="px-4 py-2 font-medium">Symbol</th>
+                    <th className="px-4 py-2 font-medium">Score</th>
+                    <th className="px-4 py-2 font-medium">Last</th>
+                    <th className="px-4 py-2 font-medium">Buy*</th>
+                    <th className="px-4 py-2 font-medium">Sell*</th>
+                    <th className="px-4 py-2 font-medium">Vol</th>
+                    <th className="px-4 py-2 font-medium">SMA200</th>
+                    <th className="px-4 py-2 font-medium">RSI</th>
+                    <th className="px-4 py-2 font-medium">Reasons</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyRec.picks.map((p, idx) => (
+                    <tr key={p.symbol} className="border-b border-white/5">
+                      <td className="px-4 py-2 text-slate-500">{idx + 1}</td>
+                      <td className="px-4 py-2 font-mono font-medium text-mint-400">{p.symbol}</td>
+                      <td className="px-4 py-2 font-mono text-slate-200">{p.score.toFixed(1)}</td>
+                      <td className="px-4 py-2 font-mono text-slate-300">
+                        {p.last_close != null ? formatMoney(p.last_close) : "—"}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-mint-400">
+                        {p.target_buy_price != null ? formatMoney(p.target_buy_price) : "—"}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-amber-200/90">
+                        {p.target_sell_price != null ? formatMoney(p.target_sell_price) : "—"}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs text-slate-400">
+                        {p.volume_last != null ? Math.round(p.volume_last).toLocaleString() : "—"}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs text-slate-400">
+                        {p.sma200 != null ? formatMoney(p.sma200) : "—"}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-slate-300">
+                        {p.rsi != null ? p.rsi.toFixed(0) : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-slate-400">{p.reasons.join(" · ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 

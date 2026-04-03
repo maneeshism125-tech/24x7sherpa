@@ -17,14 +17,20 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
 
 
 def compute_features(bars: list[Bar]) -> pd.DataFrame:
-    """Daily bars → SMA, RSI, ATR(14) as percent of price."""
+    """Daily bars → SMA5/10/20/50/200, RSI, ATR(14) as percent of price."""
     df = bars_to_dataframe(bars)
-    if df.empty or len(df) < 50:
+    if df.empty or len(df) < 15:
         return df
     df = df.sort_values("ts").reset_index(drop=True)
     c = df["close"]
-    df["sma_20"] = c.rolling(20).mean()
-    df["sma_50"] = c.rolling(50).mean()
+    df["sma_5"] = c.rolling(5, min_periods=5).mean()
+    df["sma_10"] = c.rolling(10, min_periods=10).mean()
+    if len(df) >= 20:
+        df["sma_20"] = c.rolling(20).mean()
+    if len(df) >= 50:
+        df["sma_50"] = c.rolling(50).mean()
+    if len(df) >= 200:
+        df["sma_200"] = c.rolling(200).mean()
     df["rsi_14"] = _rsi(c, 14)
     tr = pd.concat(
         [

@@ -19,6 +19,7 @@ from sherpa.execution.factory import create_broker
 from sherpa.execution.simulation import read_paper_simulation_state, reset_paper_simulation
 from sherpa.execution.simulation_paths import simulation_portfolio_path, simulation_profile_slug
 from sherpa.providers import create_news_provider, create_price_provider
+from sherpa.recommendations.daily import run_daily_picks
 from sherpa.signals.engine import Side, SignalEngine
 from sherpa.technical.indicators import compute_features
 from sherpa.universe.sp500 import get_sp500_tickers, refresh_sp500_cache
@@ -65,6 +66,38 @@ def scan(
         typer.echo("No signals (or all flat). Try larger universe or different day.")
         return
     typer.echo("\n".join(rows))
+
+
+@app.command("daily-picks")
+def daily_picks(
+    universe: int = typer.Option(150, help="How many S&P 500 names to score (time/cost)."),
+    picks: int = typer.Option(10, help="How many top names to print."),
+    skip_news: bool = typer.Option(False, help="Skip headlines (faster)."),
+    min_volume: float = typer.Option(
+        200_000,
+        help="Minimum last-session volume (shares).",
+    ),
+) -> None:
+    """Rank S&P names above SMA(200) with volume filter; SMA/RSI/ATR + headline rules — not advice."""
+    settings = get_settings()
+    out, disc, scored = run_daily_picks(
+        settings,
+        universe_cap=universe,
+        pick_count=picks,
+        skip_news=skip_news,
+        min_volume=min_volume,
+    )
+    typer.echo(disc)
+    typer.echo(
+        f"Scored {scored} symbols (close>SMA200, vol>{min_volume:,.0f}) from first {universe} tickers.\n"
+    )
+    for i, p in enumerate(out, 1):
+        r = " · ".join(p.reasons[:6])
+        tb = f"{p.target_buy_price:.2f}" if p.target_buy_price is not None else "—"
+        ts = f"{p.target_sell_price:.2f}" if p.target_sell_price is not None else "—"
+        typer.echo(
+            f"{i:2}. {p.symbol:6}  score={p.score:.1f}  buy~{tb}  sell~{ts}  | {r}"
+        )
 
 
 @app.command("trade")

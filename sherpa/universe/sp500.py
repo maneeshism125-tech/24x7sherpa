@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import logging
 from pathlib import Path
 
+import httpx
 import pandas as pd
 
 from sherpa.config import get_settings
@@ -20,7 +22,15 @@ def _cache_path() -> Path:
 
 def refresh_sp500_cache() -> list[str]:
     """Fetch S&P 500 symbols from Wikipedia and write cache."""
-    tables = pd.read_html(WIKI_URL)
+    headers = {
+        "User-Agent": "SherpaTrader/1.0 (https://github.com/; educational research)",
+        "Accept": "text/html,application/xhtml+xml",
+    }
+    with httpx.Client(timeout=45.0, headers=headers, follow_redirects=True) as client:
+        r = client.get(WIKI_URL)
+        r.raise_for_status()
+        html = r.text
+    tables = pd.read_html(io.StringIO(html))
     table = next(t for t in tables if "Symbol" in t.columns)
     tickers = table["Symbol"].astype(str).str.replace(".", "-", regex=False).tolist()
     path = _cache_path()

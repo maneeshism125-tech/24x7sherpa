@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+import logging
+
+import yfinance as yf
+
+from sherpa.cli_settings import resolve_settings
+from sherpa.execution.base import OrderRequest, OrderSide
+from sherpa.execution.factory import create_broker
+from sherpa.execution.paper import PaperBroker
+from sherpa.execution.simulation import read_paper_simulation_state, reset_paper_simulation
+from sherpa.execution.simulation_paths import simulation_portfolio_path, simulation_profile_slug
+from sherpa.providers import create_news_provider, create_price_provider
+from sherpa.signals.engine import Side, SignalEngine
+from sherpa.technical.indicators import compute_features
+from sherpa.universe.sp500 import get_sp500_tickers, refresh_sp500_cache
+
+from api.schemas import (
+    AccountResponse,
+    PositionRow,
+    ScanResponse,
+    SignalRow,
+    SimulationStatusResponse,
+    TradeResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def service_universe_refresh() -> int:
+    return len(refresh_sp500_cache())
+
+
+def service_scan(*, top: int, skip_news: bool) -> ScanResponse:
+    from sherpa.config import get_settings
+
+    settings = get_settings()
+    prices = create_price_provider(settings)
+    news_p = create_news_provider(settings)
+    engine = SignalEngine()
+    tickers = get_sp500_tickers()[:top]
+    rows: list[SignalRow] = []
+    for sym in tickers:
+        bars = prices.history_daily(sym, days=120)
+        feats = compute_features(bars)
+        news = [] if skip_news else news_p.headlines_for_symbol(sym, limit=8)
+        sig = engine.evaluate(sym, feats, news)
+        if sig.side == Side.FLAT:
+            continue
+        rows.append(
+            SignalRow(
+                symbol=sym,
+                side=sig.side.value,
+                score=float(sig.score),
+                reasons=list(sig.reasons),
+            )
+        )
+    return ScanResponse(signals=rows, scanned=len(tickers))
+
+
+def service_simulate_reset(*, profile: str, cash: float) -> str:
+    settings = resolve_settings(profile=profile)
+    path = reset_paper_simulation(settings, starting_cash=cash)
+    return str(path)
+
+
+def service_simulation_status(*, profile: str) -> SimulationStatusResponse | None:
+    settings = resolve_settings(profile=profile)
+    slug = simulation_profile_slug(settings.simulation_profile)
+    raw = read_paper_simulation_state(settings)
+    if not raw:
+        return None
+    cash = float(raw.get("cash", 0))
+    positions_map = {str(k).upper(): int(v) for k, v in raw.get("positions", {}).items()}
+    last_prices = {str(k).upper(): float(v) for k, v in raw.get("last_prices", {}).items()}
+    meta = raw.get("meta") or {}
+    start = float(meta.get("starting_cash", cash))
+    mkt = sum(last_prices.get(s, 0.0) * q for s, q in positions_map.items())
+    equity = cash + mkt
+    pnl = equity - start
+    pos_rows = [
+        PositionRow(
+            symbol=s,
+            qty=q,
+            last=last_prices.get(s, 0.0),
+            market_value=last_prices.get(s, 0.0) * q,
+        )
+        for s, q in sorted(positions_map.items())
+    ]
+    return SimulationStatusResponse(
+        profile=slug,
+        path=str(simulation_portfolio_path(settings)),
+        starting_cash=start,
+        equity=equity,
+        cash=cash,
+        pnl=pnl,
+        positions=pos_rows,
+        last_reset=meta.get("reset_at"),
+    )
+
+
+def service_account_paper(*, profile: str) -> AccountResponse:
+    settings = resolve_settings(profile=profile)
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    a = br.get_account()
+    return AccountResponse(
+        equity=a.equity,
+        cash=a.cash,
+        buying_power=a.buying_power,
+        profile=simulation_profile_slug(settings.simulation_profile),
+    )
+
+
+def service_trade_paper(*, symbol: str, side: str, qty: int, profile: str) -> TradeResponse:
+    settings = resolve_settings(profile=profile)
+    sym = symbol.upper().strip()
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    ticker = yf.Ticker(sym)
+    hist = ticker.history(period="5d")
+    if hist is None or hist.empty:
+        raise ValueError(f"No price data for {sym}")
+    last = float(hist["Close"].iloc[-1])
+    br.set_last_price(sym, last)
+    oside = OrderSide.BUY if side == "buy" else OrderSide.SELL
+    res = br.submit_market_order(OrderRequest(symbol=sym, qty=qty, side=oside))
+    return TradeResponse(
+        status=res.status,
+        broker_order_id=res.broker_order_id,
+        filled_qty=res.filled_qty,
+        avg_fill_price=res.avg_fill_price,
+        symbol=sym,
+    )

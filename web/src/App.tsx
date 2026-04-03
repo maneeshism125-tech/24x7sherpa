@@ -1,0 +1,423 @@
+import { useCallback, useEffect, useState } from "react";
+import { apiGet, apiGetOrNull, apiPost } from "./lib/api";
+
+const LS_PROFILE = "sherpa_sim_profile";
+
+type SimStatus = {
+  profile: string;
+  path: string;
+  starting_cash: number;
+  equity: number;
+  cash: number;
+  pnl: number;
+  positions: {
+    symbol: string;
+    qty: number;
+    last: number;
+    market_value: number;
+  }[];
+  last_reset: string | null;
+};
+
+type Account = {
+  equity: number;
+  cash: number;
+  buying_power: number;
+  profile: string;
+};
+
+type SignalRow = {
+  symbol: string;
+  side: string;
+  score: number;
+  reasons: string[];
+};
+
+type ScanResult = { signals: SignalRow[]; scanned: number };
+
+function formatMoney(n: number) {
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export default function App() {
+  const [profile, setProfile] = useState("default");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [sim, setSim] = useState<SimStatus | null>(null);
+  const [acct, setAcct] = useState<Account | null>(null);
+  const [scan, setScan] = useState<ScanResult | null>(null);
+
+  const [resetCash, setResetCash] = useState("100000");
+  const [tradeSym, setTradeSym] = useState("AAPL");
+  const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
+  const [tradeQty, setTradeQty] = useState("1");
+  const [scanTop, setScanTop] = useState("15");
+  const [scanSkipNews, setScanSkipNews] = useState(false);
+
+  useEffect(() => {
+    try {
+      const p = localStorage.getItem(LS_PROFILE);
+      if (p) setProfile(p);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_PROFILE, profile);
+    } catch {
+      /* ignore */
+    }
+  }, [profile]);
+
+  const run = useCallback(async (label: string, fn: () => Promise<void>) => {
+    setErr(null);
+    setBusy(label);
+    try {
+      await fn();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
+  const loadStatus = useCallback(() => {
+    return run("status", async () => {
+      const q = new URLSearchParams({ profile });
+      const data = await apiGetOrNull<SimStatus>(`/api/simulate/status?${q}`);
+      setSim(data);
+    });
+  }, [profile, run]);
+
+  const loadAccount = useCallback(() => {
+    return run("account", async () => {
+      const q = new URLSearchParams({ profile });
+      const data = await apiGet<Account>(`/api/account/paper?${q}`);
+      setAcct(data);
+    });
+  }, [profile, run]);
+
+  useEffect(() => {
+    void loadStatus().catch(() => setSim(null));
+    void loadAccount().catch(() => setAcct(null));
+  }, [loadAccount, loadStatus]);
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 lg:px-8">
+      <header className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
+            24×7 Sherpa
+          </p>
+          <h1 className="font-display mt-2 text-4xl font-bold tracking-tight text-white sm:text-5xl">
+            Paper trading lab
+          </h1>
+          <p className="mt-3 max-w-xl text-slate-400">
+            Practice with fake money on S&amp;P 500 names: scan signals, reset sandboxes, and place
+            paper market orders. Not investment advice.
+          </p>
+        </div>
+        <div className="glass flex flex-col gap-2 p-4 sm:min-w-[240px]">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Simulation profile
+          </label>
+          <input
+            className="input font-mono text-sm"
+            value={profile}
+            onChange={(e) => setProfile(e.target.value.trim() || "default")}
+            placeholder="default"
+            spellCheck={false}
+          />
+          <p className="text-xs text-slate-500">Separate portfolios per name — stored on the server.</p>
+        </div>
+      </header>
+
+      {err && (
+        <div
+          className="mb-8 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"
+          role="alert"
+        >
+          {err}
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="glass p-6">
+          <h2 className="font-display text-lg font-semibold text-white">Sandbox</h2>
+          <p className="mt-1 text-sm text-slate-400">Reset starting cash and reload positions.</p>
+          <div className="mt-5 flex flex-wrap items-end gap-3">
+            <div className="min-w-[140px] flex-1">
+              <label className="mb-1 block text-xs text-slate-500">Starting cash</label>
+              <input
+                className="input"
+                value={resetCash}
+                onChange={(e) => setResetCash(e.target.value)}
+                inputMode="decimal"
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={busy !== null}
+              onClick={() =>
+                run("reset", async () => {
+                  const cash = Number(resetCash);
+                  if (!Number.isFinite(cash) || cash <= 0) throw new Error("Invalid cash amount");
+                  await apiPost("/api/simulate/reset", { profile, cash });
+                  await loadStatus();
+                  await loadAccount();
+                })
+              }
+            >
+              {busy === "reset" ? "Resetting…" : "Reset simulation"}
+            </button>
+            <button type="button" className="btn-ghost" disabled={busy !== null} onClick={() => loadStatus()}>
+              Refresh status
+            </button>
+          </div>
+          {sim && (
+            <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-slate-500">Equity</dt>
+                <dd className="font-mono text-lg text-white">${formatMoney(sim.equity)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Cash</dt>
+                <dd className="font-mono text-lg text-mint-400">${formatMoney(sim.cash)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">P&amp;L vs start</dt>
+                <dd
+                  className={`font-mono text-lg ${sim.pnl >= 0 ? "text-mint-400" : "text-red-400"}`}
+                >
+                  {sim.pnl >= 0 ? "+" : ""}
+                  {formatMoney(sim.pnl)}
+                </dd>
+              </div>
+            </dl>
+          )}
+          {sim?.positions && sim.positions.length > 0 && (
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-500">
+                    <th className="py-2 pr-4 font-medium">Symbol</th>
+                    <th className="py-2 pr-4 font-medium">Qty</th>
+                    <th className="py-2 pr-4 font-medium">Last</th>
+                    <th className="py-2 font-medium">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sim.positions.map((p) => (
+                    <tr key={p.symbol} className="border-b border-white/5 font-mono text-slate-200">
+                      <td className="py-2 pr-4">{p.symbol}</td>
+                      <td className="py-2 pr-4">{p.qty}</td>
+                      <td className="py-2 pr-4">${formatMoney(p.last)}</td>
+                      <td className="py-2">${formatMoney(p.market_value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {sim?.last_reset && (
+            <p className="mt-4 text-xs text-slate-600">Last reset: {sim.last_reset}</p>
+          )}
+          {!sim && !busy && (
+            <p className="mt-6 text-sm text-slate-500">
+              No sandbox file for this profile yet. Use <strong>Reset simulation</strong> to create one.
+            </p>
+          )}
+        </section>
+
+        <section className="glass p-6">
+          <h2 className="font-display text-lg font-semibold text-white">Broker view (paper)</h2>
+          <p className="mt-1 text-sm text-slate-400">Same profile as sandbox — cash and equity.</p>
+          <button
+            type="button"
+            className="btn-ghost mt-5"
+            disabled={busy !== null}
+            onClick={() => loadAccount()}
+          >
+            {busy === "account" ? "Loading…" : "Refresh account"}
+          </button>
+          {acct && (
+            <dl className="mt-6 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-slate-500">Equity</dt>
+                <dd className="font-mono text-xl text-white">${formatMoney(acct.equity)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Cash</dt>
+                <dd className="font-mono text-xl text-mint-400">${formatMoney(acct.cash)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Buying power</dt>
+                <dd className="font-mono text-xl text-slate-200">${formatMoney(acct.buying_power)}</dd>
+              </div>
+            </dl>
+          )}
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <h3 className="font-medium text-white">Paper market order</h3>
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <input
+                className="input sm:col-span-1"
+                value={tradeSym}
+                onChange={(e) => setTradeSym(e.target.value.toUpperCase())}
+                placeholder="AAPL"
+                aria-label="Symbol"
+              />
+              <select
+                className="input sm:col-span-1"
+                value={tradeSide}
+                onChange={(e) => setTradeSide(e.target.value as "buy" | "sell")}
+                aria-label="Side"
+              >
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+              </select>
+              <input
+                className="input sm:col-span-1"
+                value={tradeQty}
+                onChange={(e) => setTradeQty(e.target.value)}
+                inputMode="numeric"
+                placeholder="Qty"
+                aria-label="Quantity"
+              />
+              <button
+                type="button"
+                className="btn-primary sm:col-span-1"
+                disabled={busy !== null}
+                onClick={() =>
+                  run("trade", async () => {
+                    const qty = parseInt(tradeQty, 10);
+                    if (!Number.isFinite(qty) || qty < 1) throw new Error("Invalid quantity");
+                    await apiPost("/api/trade/paper", {
+                      symbol: tradeSym,
+                      side: tradeSide,
+                      qty,
+                      profile,
+                    });
+                    await loadStatus();
+                    await loadAccount();
+                  })
+                }
+              >
+                {busy === "trade" ? "Submitting…" : "Submit"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="glass p-6 lg:col-span-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-white">Signal scan</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Rule-based demo (SMA / RSI / news filter). Can take a minute for large universes.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={scanSkipNews}
+                  onChange={(e) => setScanSkipNews(e.target.checked)}
+                  className="rounded border-white/20 bg-night-850 text-mint-500"
+                />
+                Skip news (faster)
+              </label>
+              <input
+                className="input w-24"
+                value={scanTop}
+                onChange={(e) => setScanTop(e.target.value)}
+                inputMode="numeric"
+                aria-label="Top N symbols"
+              />
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={busy !== null}
+                onClick={() =>
+                  run("scan", async () => {
+                    const top = Math.min(503, Math.max(1, parseInt(scanTop, 10) || 15));
+                    const q = new URLSearchParams({
+                      top: String(top),
+                      skip_news: String(scanSkipNews),
+                    });
+                    const data = await apiGet<ScanResult>(`/api/scan?${q}`);
+                    setScan(data);
+                  })
+                }
+              >
+                {busy === "scan" ? "Scanning…" : "Run scan"}
+              </button>
+            </div>
+          </div>
+          {scan && (
+            <p className="mt-4 text-xs text-slate-500">
+              Scanned {scan.scanned} symbols — {scan.signals.length} non-flat signals.
+            </p>
+          )}
+          {scan && scan.signals.length > 0 && (
+            <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-white/10">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-night-900">
+                  <tr className="border-b border-white/10 text-slate-500">
+                    <th className="px-4 py-2 font-medium">Symbol</th>
+                    <th className="px-4 py-2 font-medium">Side</th>
+                    <th className="px-4 py-2 font-medium">Score</th>
+                    <th className="px-4 py-2 font-medium">Reasons</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scan.signals.map((s) => (
+                    <tr key={s.symbol} className="border-b border-white/5">
+                      <td className="px-4 py-2 font-mono font-medium text-mint-400">{s.symbol}</td>
+                      <td className="px-4 py-2 uppercase text-slate-300">{s.side}</td>
+                      <td className="px-4 py-2 font-mono text-slate-200">{s.score.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-slate-400">{s.reasons.join(" · ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {scan && scan.signals.length === 0 && (
+            <p className="mt-6 text-sm text-slate-500">No signals this run — try more symbols or another day.</p>
+          )}
+        </section>
+
+        <section className="glass p-6 lg:col-span-2">
+          <h2 className="font-display text-lg font-semibold text-white">Data</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Refresh the S&amp;P 500 ticker list from Wikipedia (cached on the server).
+          </p>
+          <button
+            type="button"
+            className="btn-ghost mt-4"
+            disabled={busy !== null}
+            onClick={() =>
+              run("universe", async () => {
+                const r = await apiPost<{ tickers_cached: number }>("/api/universe/refresh");
+                alert(`Cached ${r.tickers_cached} tickers.`);
+              })
+            }
+          >
+            {busy === "universe" ? "Refreshing…" : "Refresh S&amp;P 500 universe"}
+          </button>
+        </section>
+      </div>
+
+      <footer className="mt-16 border-t border-white/10 pt-8 text-center text-xs text-slate-600">
+        Educational simulation only. Markets involve risk of loss. Past patterns do not guarantee future
+        results.
+      </footer>
+    </div>
+  );
+}

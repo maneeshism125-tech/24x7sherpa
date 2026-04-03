@@ -1,0 +1,16 @@
+.DS_Store
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+data/*.txt
+data/paper_portfolio.json
+data/simulations/
+!data/.gitkeep
+dist/
+web/node_modules/
+web/dist/
+*.egg-info/

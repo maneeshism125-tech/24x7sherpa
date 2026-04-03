@@ -83,8 +83,27 @@ class DailyPickRow(BaseModel):
     target_sell_price: float | None = None
 
 
+class PickCriteriaBody(BaseModel):
+    """All fields optional; omitted values use server defaults (see PickCriteria)."""
+
+    universe_cap: int | None = Field(None, ge=20, le=503)
+    pick_count: int | None = Field(None, ge=1, le=25)
+    skip_news: bool | None = None
+    min_bars: int | None = Field(None, ge=200, le=400)
+    min_volume: float | None = Field(None, ge=0, le=50_000_000)
+    require_above_sma200: bool | None = None
+    rsi_band_low: float | None = Field(None, ge=0, le=100)
+    rsi_band_high: float | None = Field(None, ge=0, le=100)
+    rsi_overbought: float | None = Field(None, ge=50, le=100)
+    volume_surge_ratio: float | None = Field(None, ge=1.0, le=5.0)
+    atr_elevated_pct: float | None = Field(None, ge=0.001, le=0.1)
+    news_penalty: float | None = Field(None, ge=0, le=100)
+    sell_atr_multiplier: float | None = Field(None, ge=0.1, le=5.0)
+
+
 class DailyRecommendationsResponse(BaseModel):
     picks: list[DailyPickRow]
     disclaimer: str
     universe_cap: int
     candidates_scored: int
+    criteria: dict

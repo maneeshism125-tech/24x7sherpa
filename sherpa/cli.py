@@ -19,6 +19,7 @@ from sherpa.execution.factory import create_broker
 from sherpa.execution.simulation import read_paper_simulation_state, reset_paper_simulation
 from sherpa.execution.simulation_paths import simulation_portfolio_path, simulation_profile_slug
 from sherpa.providers import create_news_provider, create_price_provider
+from sherpa.recommendations.criteria import PickCriteria
 from sherpa.recommendations.daily import run_daily_picks
 from sherpa.signals.engine import Side, SignalEngine
 from sherpa.technical.indicators import compute_features
@@ -80,16 +81,17 @@ def daily_picks(
 ) -> None:
     """Rank S&P names above SMA(200) with volume filter; SMA/RSI/ATR + headline rules — not advice."""
     settings = get_settings()
-    out, disc, scored = run_daily_picks(
-        settings,
+    cr = PickCriteria(
         universe_cap=universe,
         pick_count=picks,
         skip_news=skip_news,
         min_volume=min_volume,
     )
+    out, disc, scored = run_daily_picks(settings, criteria=cr)
     typer.echo(disc)
+    filt = "close>SMA200, " if cr.require_above_sma200 else ""
     typer.echo(
-        f"Scored {scored} symbols (close>SMA200, vol>{min_volume:,.0f}) from first {universe} tickers.\n"
+        f"Scored {scored} symbols ({filt}vol>{min_volume:,.0f}) from first {universe} tickers.\n"
     )
     for i, p in enumerate(out, 1):
         r = " · ".join(p.reasons[:6])

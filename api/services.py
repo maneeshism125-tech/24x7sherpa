@@ -19,6 +19,7 @@ from api.schemas import (
     AccountResponse,
     DailyPickRow,
     DailyRecommendationsResponse,
+    PickCriteriaBody,
     PositionRow,
     ScanResponse,
     SignalRow,
@@ -138,25 +139,14 @@ def service_trade_paper(*, symbol: str, side: str, qty: int, profile: str) -> Tr
     )
 
 
-def service_daily_recommendations(
-    *,
-    universe_cap: int,
-    pick_count: int,
-    skip_news: bool,
-    min_bars: int,
-    min_volume: float,
-) -> DailyRecommendationsResponse:
+def service_daily_recommendations(*, body: PickCriteriaBody | None = None) -> DailyRecommendationsResponse:
     from sherpa.config import get_settings
+    from sherpa.recommendations.criteria import PickCriteria
     from sherpa.recommendations.daily import run_daily_picks
 
-    picks, disclaimer, scored = run_daily_picks(
-        get_settings(),
-        universe_cap=universe_cap,
-        pick_count=pick_count,
-        skip_news=skip_news,
-        min_bars=min_bars,
-        min_volume=min_volume,
-    )
+    overrides = body.model_dump(exclude_none=True) if body else {}
+    cr = PickCriteria.from_dict(overrides)
+    picks, disclaimer, scored = run_daily_picks(get_settings(), criteria=cr)
     rows = [
         DailyPickRow(
             symbol=p.symbol,
@@ -177,6 +167,7 @@ def service_daily_recommendations(
     return DailyRecommendationsResponse(
         picks=rows,
         disclaimer=disclaimer,
-        universe_cap=universe_cap,
+        universe_cap=cr.universe_cap,
         candidates_scored=scored,
+        criteria=cr.to_dict(),
     )

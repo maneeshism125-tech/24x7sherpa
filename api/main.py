@@ -17,6 +17,7 @@ from api import services
 from api.schemas import (
     AccountResponse,
     DailyRecommendationsResponse,
+    PickCriteriaBody,
     ScanResponse,
     SimulateResetBody,
     SimulationStatusResponse,
@@ -97,14 +98,23 @@ async def api_daily_recommendations(
     ),
 ) -> DailyRecommendationsResponse:
     try:
-        return await asyncio.to_thread(
-            services.service_daily_recommendations,
+        body = PickCriteriaBody(
             universe_cap=universe_cap,
             pick_count=pick_count,
             skip_news=skip_news,
             min_bars=min_bars,
             min_volume=min_volume,
         )
+        return await asyncio.to_thread(services.service_daily_recommendations, body=body)
+    except Exception as e:
+        logger.exception("daily recommendations failed")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/api/recommendations/daily", response_model=DailyRecommendationsResponse)
+async def api_daily_recommendations_post(body: PickCriteriaBody) -> DailyRecommendationsResponse:
+    try:
+        return await asyncio.to_thread(services.service_daily_recommendations, body=body)
     except Exception as e:
         logger.exception("daily recommendations failed")
         raise HTTPException(status_code=500, detail=str(e)) from e

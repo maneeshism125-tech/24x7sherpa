@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from sherpa.recommendations.criteria import PickCriteria
 from sherpa.recommendations.daily import _score_candidate
 
 
@@ -29,6 +30,6 @@ def test_score_bullish_alignment() -> None:
     c = float(df.iloc[-1]["close"])
     df.loc[df.index[-1], "sma_10"] = c - 0.9
     df.loc[df.index[-1], "sma_5"] = c - 0.2
-    sc, reasons = _score_candidate(df, [])
+    sc, reasons = _score_candidate(df, [], PickCriteria())
     assert sc >= 25
     assert any("SMA(5)" in r or "momentum" in r or "SMA(10)" in r for r in reasons)

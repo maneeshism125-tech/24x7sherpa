@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiGetOrNull, apiPost } from "./lib/api";
+import { loadPickCriteria, type PickCriteria } from "./pickCriteria";
+import { SettingsView } from "./SettingsView";
 
 const LS_PROFILE = "sherpa_sim_profile";
 
@@ -55,6 +57,7 @@ type DailyRecResult = {
   disclaimer: string;
   universe_cap: number;
   candidates_scored: number;
+  criteria: PickCriteria;
 };
 
 function formatMoney(n: number) {
@@ -65,6 +68,8 @@ function formatMoney(n: number) {
 }
 
 export default function App() {
+  const [page, setPage] = useState<"main" | "settings">("main");
+  const [pickCriteria, setPickCriteria] = useState<PickCriteria>(() => loadPickCriteria());
   const [profile, setProfile] = useState("default");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -79,9 +84,6 @@ export default function App() {
   const [tradeQty, setTradeQty] = useState("1");
   const [scanTop, setScanTop] = useState("15");
   const [scanSkipNews, setScanSkipNews] = useState(false);
-  const [pickUniverse, setPickUniverse] = useState("120");
-  const [pickCount, setPickCount] = useState("10");
-  const [pickSkipNews, setPickSkipNews] = useState(false);
 
   useEffect(() => {
     try {
@@ -133,6 +135,19 @@ export default function App() {
     void loadAccount().catch(() => setAcct(null));
   }, [loadAccount, loadStatus]);
 
+  if (page === "settings") {
+    return (
+      <SettingsView
+        criteria={pickCriteria}
+        onSave={(c) => {
+          setPickCriteria(c);
+          setPage("main");
+        }}
+        onCancel={() => setPage("main")}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 lg:px-8">
       <header className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
@@ -148,18 +163,27 @@ export default function App() {
             paper market orders. Not investment advice.
           </p>
         </div>
-        <div className="glass flex flex-col gap-2 p-4 sm:min-w-[240px]">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Simulation profile
-          </label>
-          <input
-            className="input font-mono text-sm"
-            value={profile}
-            onChange={(e) => setProfile(e.target.value.trim() || "default")}
-            placeholder="default"
-            spellCheck={false}
-          />
-          <p className="text-xs text-slate-500">Separate portfolios per name — stored on the server.</p>
+        <div className="glass flex flex-col gap-3 p-4 sm:min-w-[240px]">
+          <button
+            type="button"
+            className="btn-ghost w-full justify-center text-sm"
+            onClick={() => setPage("settings")}
+          >
+            Daily pick criteria
+          </button>
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Simulation profile
+            </label>
+            <input
+              className="input mt-1 font-mono text-sm"
+              value={profile}
+              onChange={(e) => setProfile(e.target.value.trim() || "default")}
+              placeholder="default"
+              spellCheck={false}
+            />
+            <p className="mt-1 text-xs text-slate-500">Separate portfolios per name — stored on the server.</p>
+          </div>
         </div>
       </header>
 
@@ -422,53 +446,41 @@ export default function App() {
         <section className="glass p-6 lg:col-span-2">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="font-display text-lg font-semibold text-white">Daily technical rank (top 10)</h2>
+              <h2 className="font-display text-lg font-semibold text-white">Daily technical rank</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Only names with <strong>close &gt; SMA(200)</strong> and <strong>last volume &gt; 200k</strong> shares.
-                Suggested buy/sell are ATR/SMA heuristics (illustrative). Not a forecast or advice.
+                Uses your saved{" "}
+                <button
+                  type="button"
+                  className="text-mint-400 underline decoration-mint-500/50 underline-offset-2 hover:text-mint-300"
+                  onClick={() => setPage("settings")}
+                >
+                  criteria
+                </button>
+                : first <strong>{pickCriteria.universe_cap}</strong> S&amp;P names, top{" "}
+                <strong>{pickCriteria.pick_count}</strong> after filters
+                {pickCriteria.require_above_sma200 ? (
+                  <>
+                    , <strong>close &gt; SMA(200)</strong>
+                  </>
+                ) : (
+                  " (no SMA(200) filter)"
+                )}
+                , last volume ≥ <strong>{pickCriteria.min_volume.toLocaleString()}</strong> shares
+                {pickCriteria.skip_news ? ", headlines off" : ""}. Suggested prices are ATR/SMA heuristics only — not
+                advice.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={pickSkipNews}
-                  onChange={(e) => setPickSkipNews(e.target.checked)}
-                  className="rounded border-white/20 bg-night-850 text-mint-500"
-                />
-                Skip news
-              </label>
-              <input
-                className="input w-24"
-                value={pickUniverse}
-                onChange={(e) => setPickUniverse(e.target.value)}
-                inputMode="numeric"
-                aria-label="Universe size"
-                title="Symbols to score"
-              />
-              <input
-                className="input w-16"
-                value={pickCount}
-                onChange={(e) => setPickCount(e.target.value)}
-                inputMode="numeric"
-                aria-label="Pick count"
-              />
+            <div className="flex shrink-0 flex-wrap items-center gap-3">
               <button
                 type="button"
                 className="btn-primary"
                 disabled={busy !== null}
                 onClick={() =>
                   run("picks", async () => {
-                    const cap = Math.min(503, Math.max(20, parseInt(pickUniverse, 10) || 120));
-                    const pc = Math.min(25, Math.max(1, parseInt(pickCount, 10) || 10));
-                    const q = new URLSearchParams({
-                      universe_cap: String(cap),
-                      pick_count: String(pc),
-                      skip_news: String(pickSkipNews),
-                      min_bars: "200",
-                      min_volume: "200000",
-                    });
-                    const data = await apiGet<DailyRecResult>(`/api/recommendations/daily?${q}`);
+                    const data = await apiPost<DailyRecResult>(
+                      "/api/recommendations/daily",
+                      pickCriteria,
+                    );
                     setDailyRec(data);
                   })
                 }
@@ -489,7 +501,8 @@ export default function App() {
           )}
           {dailyRec && dailyRec.picks.length > 0 && (
             <p className="mt-2 text-xs text-slate-600">
-              *Suggested buy ≈ pullback above SMA(200); suggested sell ≈ last close + 1×ATR (capped). Not limit/stop
+              *Suggested buy ≈ pullback above SMA(200); suggested sell ≈ last close +{" "}
+              {dailyRec.criteria?.sell_atr_multiplier ?? pickCriteria.sell_atr_multiplier}×ATR (capped). Not limit/stop
               advice.
             </p>
           )}

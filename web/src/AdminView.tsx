@@ -53,26 +53,26 @@ export function AdminView({ onBack }: Props) {
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 lg:px-8">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
-            Admin
+          <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-600">
+            Settings · Admin
           </p>
-          <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-white">
+          <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-slate-900">
             User accounts
           </h1>
-          <p className="mt-2 text-sm text-slate-400">
-            Signed in as <span className="font-mono text-slate-200">{user?.user_id}</span>. Users can also
+          <p className="mt-2 text-sm text-slate-600">
+            Signed in as <span className="font-mono text-slate-800">{user?.user_id}</span>. Users can also
             self-register when signup is enabled. Data lives in{" "}
-            <code className="text-slate-500">data/users.sqlite</code>.
+            <code className="text-slate-600">data/users.sqlite</code>.
           </p>
         </div>
         <button type="button" className="btn-ghost" onClick={onBack}>
-          Back to app
+          ← Daily pick criteria
         </button>
       </header>
 
       {err && (
         <div
-          className="mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"
+          className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
           role="alert"
         >
           {err}
@@ -80,7 +80,7 @@ export function AdminView({ onBack }: Props) {
       )}
 
       <section className="glass mb-8 p-6">
-        <h2 className="font-display text-base font-semibold text-white">Create user (manual)</h2>
+        <h2 className="font-display text-base font-semibold text-slate-900">Create user (manual)</h2>
         <p className="mt-1 text-xs text-slate-500">
           Optional email/address. User id: letters, digits, underscore (3–32). Password ≥ 8.
         </p>
@@ -121,12 +121,12 @@ export function AdminView({ onBack }: Props) {
               onChange={(e) => setNewPassword(e.target.value)}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-400">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
               checked={newAdmin}
               onChange={(e) => setNewAdmin(e.target.checked)}
-              className="rounded border-white/20 bg-night-850 text-mint-500"
+              className="rounded border-slate-300 bg-white text-mint-600"
             />
             Admin
           </label>
@@ -160,10 +160,10 @@ export function AdminView({ onBack }: Props) {
       </section>
 
       <section className="glass overflow-x-auto p-6">
-        <h2 className="font-display text-base font-semibold text-white">All users</h2>
+        <h2 className="font-display text-base font-semibold text-slate-900">All users</h2>
         <table className="mt-4 w-full min-w-[900px] text-left text-sm">
           <thead>
-            <tr className="border-b border-white/10 text-slate-500">
+            <tr className="border-b border-slate-200 text-slate-500">
               <th className="py-2 pr-3 font-medium">User id</th>
               <th className="py-2 pr-3 font-medium">Email</th>
               <th className="py-2 pr-3 font-medium">Address</th>
@@ -214,8 +214,8 @@ function UserEditRow({
 
   const label = `patch-${row.user_id}`;
   return (
-    <tr className="border-b border-white/5 align-top">
-      <td className="py-3 pr-3 font-mono text-mint-400">{row.user_id}</td>
+    <tr className="border-b border-slate-100 align-top">
+      <td className="py-3 pr-3 font-mono text-mint-700">{row.user_id}</td>
       <td className="max-w-[140px] py-3 pr-3 text-xs text-slate-400" title={row.email ?? ""}>
         {clip(row.email, 24)}
       </td>
@@ -227,7 +227,7 @@ function UserEditRow({
           type="checkbox"
           checked={adm}
           onChange={(e) => setAdm(e.target.checked)}
-          className="rounded border-white/20 bg-night-850 text-mint-500"
+          className="rounded border-slate-300 bg-white text-mint-600"
           aria-label={`Admin ${row.user_id}`}
         />
       </td>
@@ -236,7 +236,7 @@ function UserEditRow({
           type="checkbox"
           checked={dis}
           onChange={(e) => setDis(e.target.checked)}
-          className="rounded border-white/20 bg-night-850 text-mint-500"
+          className="rounded border-slate-300 bg-white text-mint-600"
           aria-label={`Disabled ${row.user_id}`}
         />
       </td>

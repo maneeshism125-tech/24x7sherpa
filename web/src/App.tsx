@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { AdminView } from "./AdminView";
 import { useAuth } from "./AuthContext";
 import { AuthEntry } from "./AuthEntry";
+import { BusinessNewsView } from "./BusinessNewsView";
+import { DailyRankHistoryView } from "./DailyRankHistoryView";
 import { apiDelete, apiGet, apiGetOrNull, apiPost } from "./lib/api";
+import { mergeDailyRankSnapshot } from "./lib/dailyRankSnapshots";
 import { loadPickCriteria, type PickCriteria, universeLabel } from "./pickCriteria";
 import { SettingsView } from "./SettingsView";
+import { TopNav, type AppPage, type MainTab, type SettingsTab } from "./TopNav";
 
 const LS_PROFILE = "sherpa_sim_profile";
 
@@ -87,7 +91,9 @@ function formatMoney(n: number) {
 
 export default function App() {
   const { ready, authRequired, user, err: authErr, logout } = useAuth();
-  const [page, setPage] = useState<"main" | "settings" | "admin">("main");
+  const [page, setPage] = useState<AppPage>("main");
+  const [mainTab, setMainTab] = useState<MainTab>("portfolio");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("criteria");
   const [pickCriteria, setPickCriteria] = useState<PickCriteria>(() => loadPickCriteria());
   const [universeRefresh, setUniverseRefresh] = useState(() => loadPickCriteria().universe_id);
   const [profile, setProfile] = useState("default");
@@ -178,12 +184,14 @@ export default function App() {
   }, [pickCriteria.universe_id]);
 
   useEffect(() => {
-    if (page === "admin" && !user?.is_admin) setPage("main");
-  }, [page, user?.is_admin]);
+    if (page === "settings" && settingsTab === "admin" && !user?.is_admin) {
+      setSettingsTab("criteria");
+    }
+  }, [page, settingsTab, user?.is_admin]);
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">
+      <div className="flex min-h-screen items-center justify-center bg-white text-slate-500">
         Loading…
       </div>
     );
@@ -191,7 +199,7 @@ export default function App() {
 
   if (authErr) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center text-red-200">
+      <div className="mx-auto max-w-md bg-white px-4 py-16 text-center text-red-700">
         <p>{authErr}</p>
       </div>
     );
@@ -201,70 +209,109 @@ export default function App() {
     return <AuthEntry />;
   }
 
-  if (page === "admin" && user?.is_admin) {
-    return <AdminView onBack={() => setPage("main")} />;
-  }
-
-  if (page === "settings") {
-    return (
-      <SettingsView
-        criteria={pickCriteria}
-        onSave={(c) => {
-          setPickCriteria(c);
+  const shell = (
+    <div className="min-h-screen bg-white">
+      <TopNav
+        page={page}
+        mainTab={mainTab}
+        settingsTab={settingsTab}
+        onGoMain={(tab) => {
           setPage("main");
+          setMainTab(tab);
         }}
-        onCancel={() => setPage("main")}
+        onGoNews={() => setPage("news")}
+        onGoRankHistory={() => setPage("rankHistory")}
+        onGoSettings={(tab) => {
+          setPage("settings");
+          setSettingsTab(tab);
+        }}
+        user={user}
+        authRequired={authRequired}
+        onLogout={logout}
       />
-    );
-  }
 
-  return (
-    <div className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6 lg:px-8">
-      <header className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
-            24×7 Sherpa
-          </p>
-          <h1 className="font-display mt-2 text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            Paper trading lab
-          </h1>
-          <p className="mt-3 max-w-xl text-slate-400">
-            Practice with fake money on S&amp;P 500 names: scan signals, reset sandboxes, and place
-            paper market orders. Not investment advice.
-          </p>
-        </div>
-        <div className="glass flex flex-col gap-3 p-4 sm:min-w-[240px]">
-          {authRequired && user && (
-            <p className="text-center text-xs text-slate-500">
-              <span className="font-mono text-slate-300">{user.user_id}</span>
-              {user.is_admin && (
-                <span className="ml-2 rounded bg-mint-500/20 px-1.5 py-0.5 text-mint-400">admin</span>
+      {page === "news" && <BusinessNewsView />}
+
+      {page === "rankHistory" && <DailyRankHistoryView />}
+
+      {page === "settings" && (
+        <>
+          <div className="border-b border-slate-200 bg-slate-50/80">
+            <div className="mx-auto flex max-w-6xl flex-wrap gap-2 px-4 py-3 sm:px-6 lg:px-8">
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                  settingsTab === "criteria"
+                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                    : "text-slate-600 hover:bg-white/80"
+                }`}
+                onClick={() => setSettingsTab("criteria")}
+              >
+                Daily pick criteria
+              </button>
+              {user?.is_admin && (
+                <button
+                  type="button"
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                    settingsTab === "admin"
+                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                      : "text-slate-600 hover:bg-white/80"
+                  }`}
+                  onClick={() => setSettingsTab("admin")}
+                >
+                  User admin
+                </button>
               )}
+            </div>
+          </div>
+          {settingsTab === "criteria" ? (
+            <SettingsView
+              criteria={pickCriteria}
+              onSave={(c) => {
+                setPickCriteria(c);
+                setPage("main");
+              }}
+              onCancel={() => setPage("main")}
+            />
+          ) : (
+            user?.is_admin && <AdminView onBack={() => setSettingsTab("criteria")} />
+          )}
+        </>
+      )}
+
+      {page === "main" && (
+        <div className="mx-auto max-w-6xl px-4 pb-24 pt-8 sm:px-6 lg:px-8">
+          <header className="mb-10">
+            <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-600">
+              24×7 Sherpa
             </p>
-          )}
-          {user?.is_admin && (
-            <button
-              type="button"
-              className="btn-ghost w-full justify-center text-sm"
-              onClick={() => setPage("admin")}
+            <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              {mainTab === "portfolio" ? "Portfolio (sandbox)" : "Paper trading"}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm text-slate-600">
+              {mainTab === "portfolio"
+                ? "Reset sandbox cash, track simulated positions, refresh index ticker caches, then scan or rank names — all on fake money. Not investment advice."
+                : "Place market, limit, stop, and stop-limit paper orders on the same simulation profile as your sandbox. Not real brokerage execution."}
+            </p>
+          </header>
+
+          {err && (
+            <div
+              className="mb-8 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              role="alert"
             >
-              Admin — users
-            </button>
+              {err}
+            </div>
           )}
-          <button
-            type="button"
-            className="btn-ghost w-full justify-center text-sm"
-            onClick={() => setPage("settings")}
-          >
-            Daily pick criteria
-          </button>
-          {authRequired && (
-            <button type="button" className="btn-ghost w-full justify-center text-xs" onClick={logout}>
-              Sign out
-            </button>
-          )}
-          <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+
+          <div className="flex flex-col gap-6">
+            {mainTab === "portfolio" && (
+              <>
+        <section className="glass p-6 w-full min-w-0">
+          <h2 className="font-display text-lg font-semibold text-slate-900">Sandbox</h2>
+          <p className="mt-1 text-sm text-slate-600">Reset starting cash and reload positions.</p>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-4">
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-600">
               Simulation profile
             </label>
             <input
@@ -276,22 +323,6 @@ export default function App() {
             />
             <p className="mt-1 text-xs text-slate-500">Separate portfolios per name — stored on the server.</p>
           </div>
-        </div>
-      </header>
-
-      {err && (
-        <div
-          className="mb-8 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"
-          role="alert"
-        >
-          {err}
-        </div>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="glass p-6">
-          <h2 className="font-display text-lg font-semibold text-white">Sandbox</h2>
-          <p className="mt-1 text-sm text-slate-400">Reset starting cash and reload positions.</p>
           <div className="mt-5 flex flex-wrap items-end gap-3">
             <div className="min-w-[140px] flex-1">
               <label className="mb-1 block text-xs text-slate-500">Starting cash</label>
@@ -326,7 +357,7 @@ export default function App() {
             <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-slate-500">Equity</dt>
-                <dd className="font-mono text-lg text-white">${formatMoney(sim.equity)}</dd>
+                <dd className="font-mono text-lg text-slate-900">${formatMoney(sim.equity)}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Cash</dt>
@@ -347,7 +378,7 @@ export default function App() {
             <div className="mt-6 overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 text-slate-500">
+                  <tr className="border-b border-slate-200 text-slate-500">
                     <th className="py-2 pr-4 font-medium">Symbol</th>
                     <th className="py-2 pr-4 font-medium">Qty</th>
                     <th className="py-2 pr-4 font-medium">Last</th>
@@ -356,7 +387,7 @@ export default function App() {
                 </thead>
                 <tbody>
                   {sim.positions.map((p) => (
-                    <tr key={p.symbol} className="border-b border-white/5 font-mono text-slate-200">
+                    <tr key={p.symbol} className="border-b border-slate-100 font-mono text-slate-800">
                       <td className="py-2 pr-4">{p.symbol}</td>
                       <td className="py-2 pr-4">{p.qty}</td>
                       <td className="py-2 pr-4">${formatMoney(p.last)}</td>
@@ -376,10 +407,13 @@ export default function App() {
             </p>
           )}
         </section>
+              </>
+            )}
 
-        <section className="glass p-6">
-          <h2 className="font-display text-lg font-semibold text-white">Broker view (paper)</h2>
-          <p className="mt-1 text-sm text-slate-400">
+            {mainTab === "paper" && (
+              <section className="glass p-6 w-full min-w-0">
+          <h2 className="font-display text-lg font-semibold text-slate-900">Paper trading</h2>
+          <p className="mt-1 text-sm text-slate-600">
             Same simulation profile as sandbox. Fills use Yahoo&apos;s latest close per symbol plus a small
             slippage model. <strong>Limit</strong> orders execute when the quote crosses your price;
             <strong> Stop</strong> is stop-market (sell: fires when price falls to stop; buy: when it rises);{" "}
@@ -422,7 +456,7 @@ export default function App() {
             <dl className="mt-6 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-slate-500">Equity</dt>
-                <dd className="font-mono text-xl text-white">${formatMoney(acct.equity)}</dd>
+                <dd className="font-mono text-xl text-slate-900">${formatMoney(acct.equity)}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Cash</dt>
@@ -430,12 +464,12 @@ export default function App() {
               </div>
               <div>
                 <dt className="text-slate-500">Buying power</dt>
-                <dd className="font-mono text-xl text-slate-200">${formatMoney(acct.buying_power)}</dd>
+                <dd className="font-mono text-xl text-slate-800">${formatMoney(acct.buying_power)}</dd>
               </div>
             </dl>
           )}
-          <div className="mt-8 border-t border-white/10 pt-6">
-            <h3 className="font-medium text-white">Place order</h3>
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <h3 className="font-medium text-slate-900">Place order</h3>
             <p className="mt-1 text-xs text-slate-500">
               Market fills immediately after the quote refresh inside submit. Working orders need periodic{" "}
               <em>Update quote &amp; fills</em> (or another submit on the same symbol).
@@ -550,15 +584,15 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="mt-8 border-t border-white/10 pt-6">
-            <h3 className="font-medium text-white">Working orders</h3>
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <h3 className="font-medium text-slate-900">Working orders</h3>
             {openOrders.length === 0 ? (
               <p className="mt-2 text-sm text-slate-500">No open limit/stop orders for this profile.</p>
             ) : (
-              <div className="mt-3 max-h-56 overflow-auto rounded-xl border border-white/10">
+              <div className="mt-3 max-h-56 overflow-auto rounded-xl border border-slate-200">
                 <table className="w-full text-left text-xs sm:text-sm">
-                  <thead className="sticky top-0 bg-night-900">
-                    <tr className="border-b border-white/10 text-slate-500">
+                  <thead className="sticky top-0 bg-slate-100">
+                    <tr className="border-b border-slate-200 text-slate-500">
                       <th className="px-3 py-2 font-medium">Symbol</th>
                       <th className="px-3 py-2 font-medium">Side</th>
                       <th className="px-3 py-2 font-medium">Type</th>
@@ -571,7 +605,7 @@ export default function App() {
                   </thead>
                   <tbody>
                     {openOrders.map((o) => (
-                      <tr key={o.id} className="border-b border-white/5 font-mono text-slate-300">
+                      <tr key={o.id} className="border-b border-slate-100 font-mono text-slate-700">
                         <td className="px-3 py-2 text-mint-400">{o.symbol}</td>
                         <td className="px-3 py-2 uppercase">{o.side}</td>
                         <td className="px-3 py-2">{o.order_type.replace("_", "-")}</td>
@@ -586,7 +620,7 @@ export default function App() {
                         <td className="px-3 py-2">
                           <button
                             type="button"
-                            className="text-amber-300/90 underline hover:text-amber-200"
+                            className="text-amber-700 underline hover:text-amber-900"
                             disabled={busy !== null}
                             onClick={() =>
                               run(`cancel-${o.id}`, async () => {
@@ -609,22 +643,23 @@ export default function App() {
             )}
           </div>
         </section>
+            )}
 
-        <section className="glass p-6 lg:col-span-2">
+        <section className="glass p-6 w-full min-w-0">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-display text-lg font-semibold text-white">Signal scan</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="font-display text-lg font-semibold text-slate-900">Signal scan</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Rule-based demo (SMA / RSI / news filter). Can take a minute for large universes.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-slate-400">
+              <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input
                   type="checkbox"
                   checked={scanSkipNews}
                   onChange={(e) => setScanSkipNews(e.target.checked)}
-                  className="rounded border-white/20 bg-night-850 text-mint-500"
+                  className="rounded border-slate-300 bg-white text-mint-600"
                 />
                 Skip news (faster)
               </label>
@@ -661,10 +696,10 @@ export default function App() {
             </p>
           )}
           {scan && scan.signals.length > 0 && (
-            <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-white/10">
+            <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-slate-200">
               <table className="w-full text-left text-sm">
-                <thead className="sticky top-0 bg-night-900">
-                  <tr className="border-b border-white/10 text-slate-500">
+                <thead className="sticky top-0 bg-slate-100">
+                  <tr className="border-b border-slate-200 text-slate-500">
                     <th className="px-4 py-2 font-medium">Symbol</th>
                     <th className="px-4 py-2 font-medium">Side</th>
                     <th className="px-4 py-2 font-medium">Score</th>
@@ -673,11 +708,11 @@ export default function App() {
                 </thead>
                 <tbody>
                   {scan.signals.map((s) => (
-                    <tr key={s.symbol} className="border-b border-white/5">
-                      <td className="px-4 py-2 font-mono font-medium text-mint-400">{s.symbol}</td>
-                      <td className="px-4 py-2 uppercase text-slate-300">{s.side}</td>
-                      <td className="px-4 py-2 font-mono text-slate-200">{s.score.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-slate-400">{s.reasons.join(" · ")}</td>
+                    <tr key={s.symbol} className="border-b border-slate-100">
+                      <td className="px-4 py-2 font-mono font-medium text-mint-700">{s.symbol}</td>
+                      <td className="px-4 py-2 uppercase text-slate-700">{s.side}</td>
+                      <td className="px-4 py-2 font-mono text-slate-800">{s.score.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-slate-600">{s.reasons.join(" · ")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -689,16 +724,19 @@ export default function App() {
           )}
         </section>
 
-        <section className="glass p-6 lg:col-span-2">
+        <section className="glass p-6 w-full min-w-0">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="font-display text-lg font-semibold text-white">Daily technical rank</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="font-display text-lg font-semibold text-slate-900">Daily technical rank</h2>
+              <p className="mt-1 text-sm text-slate-600">
                 Uses your saved{" "}
                 <button
                   type="button"
-                  className="text-mint-400 underline decoration-mint-500/50 underline-offset-2 hover:text-mint-300"
-                  onClick={() => setPage("settings")}
+                  className="text-mint-700 underline decoration-mint-500/50 underline-offset-2 hover:text-mint-600"
+                  onClick={() => {
+                    setPage("settings");
+                    setSettingsTab("criteria");
+                  }}
                 >
                   criteria
                 </button>
@@ -729,6 +767,13 @@ export default function App() {
                       pickCriteria,
                     );
                     setDailyRec(data);
+                    mergeDailyRankSnapshot({
+                      picks: data.picks,
+                      disclaimer: data.disclaimer,
+                      universe_cap: data.universe_cap,
+                      candidates_scored: data.candidates_scored,
+                      criteria: data.criteria,
+                    });
                   })
                 }
               >
@@ -737,7 +782,7 @@ export default function App() {
             </div>
           </div>
           {dailyRec && (
-            <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/90">
+            <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               {dailyRec.disclaimer}
             </p>
           )}
@@ -754,10 +799,10 @@ export default function App() {
             </p>
           )}
           {dailyRec && dailyRec.picks.length > 0 && (
-            <div className="mt-4 max-h-96 overflow-auto rounded-xl border border-white/10">
+            <div className="mt-4 max-h-96 overflow-auto rounded-xl border border-slate-200">
               <table className="w-full text-left text-sm">
-                <thead className="sticky top-0 bg-night-900">
-                  <tr className="border-b border-white/10 text-slate-500">
+                <thead className="sticky top-0 bg-slate-100">
+                  <tr className="border-b border-slate-200 text-slate-500">
                     <th className="px-4 py-2 font-medium">#</th>
                     <th className="px-4 py-2 font-medium">Symbol</th>
                     <th className="px-4 py-2 font-medium">Score</th>
@@ -772,29 +817,29 @@ export default function App() {
                 </thead>
                 <tbody>
                   {dailyRec.picks.map((p, idx) => (
-                    <tr key={p.symbol} className="border-b border-white/5">
+                    <tr key={p.symbol} className="border-b border-slate-100">
                       <td className="px-4 py-2 text-slate-500">{idx + 1}</td>
-                      <td className="px-4 py-2 font-mono font-medium text-mint-400">{p.symbol}</td>
-                      <td className="px-4 py-2 font-mono text-slate-200">{p.score.toFixed(1)}</td>
-                      <td className="px-4 py-2 font-mono text-slate-300">
+                      <td className="px-4 py-2 font-mono font-medium text-mint-700">{p.symbol}</td>
+                      <td className="px-4 py-2 font-mono text-slate-800">{p.score.toFixed(1)}</td>
+                      <td className="px-4 py-2 font-mono text-slate-700">
                         {p.last_close != null ? formatMoney(p.last_close) : "—"}
                       </td>
-                      <td className="px-4 py-2 font-mono text-mint-400">
+                      <td className="px-4 py-2 font-mono text-mint-700">
                         {p.target_buy_price != null ? formatMoney(p.target_buy_price) : "—"}
                       </td>
-                      <td className="px-4 py-2 font-mono text-amber-200/90">
+                      <td className="px-4 py-2 font-mono text-amber-800">
                         {p.target_sell_price != null ? formatMoney(p.target_sell_price) : "—"}
                       </td>
-                      <td className="px-4 py-2 font-mono text-xs text-slate-400">
+                      <td className="px-4 py-2 font-mono text-xs text-slate-600">
                         {p.volume_last != null ? Math.round(p.volume_last).toLocaleString() : "—"}
                       </td>
-                      <td className="px-4 py-2 font-mono text-xs text-slate-400">
+                      <td className="px-4 py-2 font-mono text-xs text-slate-600">
                         {p.sma200 != null ? formatMoney(p.sma200) : "—"}
                       </td>
-                      <td className="px-4 py-2 font-mono text-slate-300">
+                      <td className="px-4 py-2 font-mono text-slate-700">
                         {p.rsi != null ? p.rsi.toFixed(0) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-slate-400">{p.reasons.join(" · ")}</td>
+                      <td className="px-4 py-2 text-slate-600">{p.reasons.join(" · ")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -803,9 +848,10 @@ export default function App() {
           )}
         </section>
 
-        <section className="glass p-6 lg:col-span-2">
-          <h2 className="font-display text-lg font-semibold text-white">Data</h2>
-          <p className="mt-1 text-sm text-slate-400">
+            {mainTab === "portfolio" && (
+        <section className="glass p-6 w-full min-w-0">
+          <h2 className="font-display text-lg font-semibold text-slate-900">Data</h2>
+          <p className="mt-1 text-sm text-slate-600">
             Re-download the ticker list for an index (Wikipedia, Nasdaq Trader, or a third-party Russell table —
             cached under the API data directory). Russell 2000 needs a successful refresh before daily picks.
           </p>
@@ -842,12 +888,17 @@ export default function App() {
             </button>
           </div>
         </section>
+            )}
       </div>
+        </div>
+      )}
 
-      <footer className="mt-16 border-t border-white/10 pt-8 text-center text-xs text-slate-600">
+      <footer className="mt-12 border-t border-slate-200 py-8 text-center text-xs text-slate-500">
         Educational simulation only. Markets involve risk of loss. Past patterns do not guarantee future
         results.
       </footer>
     </div>
   );
+
+  return shell;
 }

@@ -15,34 +15,34 @@ export function LoginView({ onCreateAccount }: Props) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4">
       <div className="glass w-full max-w-md p-8">
-        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
+        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-600">
           24×7 Sherpa
         </p>
-        <h1 className="font-display mt-2 text-2xl font-bold text-white">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <h1 className="font-display mt-2 text-2xl font-bold text-slate-900">Sign in</h1>
+        <p className="mt-2 text-sm text-slate-600">
           {onCreateAccount ? (
             <>
               Sign in with your user id and password. New here? Use{" "}
               <button
                 type="button"
-                className="text-mint-400 underline decoration-mint-500/50 underline-offset-2 hover:text-mint-300"
+                className="text-mint-700 underline decoration-mint-500/50 underline-offset-2 hover:text-mint-600"
                 onClick={onCreateAccount}
               >
                 Create account
               </button>
-              . The first server user is still <code className="text-slate-300">admin</code> /{" "}
-              <code className="text-slate-300">changeme</code> unless bootstrap password is set.
+              . The first server user is still               <code className="text-slate-800">admin</code> /{" "}
+              <code className="text-slate-800">changeme</code> unless bootstrap password is set.
             </>
           ) : (
             <>
               Public signup is turned off — use an account from your administrator. First deploy:{" "}
-              <code className="text-slate-300">admin</code> / <code className="text-slate-300">changeme</code>{" "}
-              unless <code className="text-slate-300">SHERPA_BOOTSTRAP_ADMIN_PASSWORD</code> is set.
+              <code className="text-slate-800">admin</code> / <code className="text-slate-800">changeme</code>{" "}
+              unless <code className="text-slate-800">SHERPA_BOOTSTRAP_ADMIN_PASSWORD</code> is set.
             </>
           )}
         </p>
         {err && (
-          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
             {err}
           </p>
         )}

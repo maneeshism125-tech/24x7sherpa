@@ -19,13 +19,13 @@ export function SettingsView({ criteria, onSave, onCancel }: Props) {
   return (
     <div className="mx-auto max-w-4xl px-4 pb-24 pt-10 sm:px-6 lg:px-8">
       <header className="mb-10">
-        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
+        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-600">
           Settings
         </p>
-        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+        <h1 className="font-display mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           Daily pick criteria
         </h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-400">
+        <p className="mt-3 max-w-2xl text-sm text-slate-600">
           These values tune filters and the rule-based score (RSI band, volume surge, headline penalty,
           suggested sell distance). Saved in this browser only. Not investment advice.
         </p>
@@ -33,7 +33,7 @@ export function SettingsView({ criteria, onSave, onCancel }: Props) {
 
       <div className="glass space-y-8 p-6">
         <section>
-          <h2 className="font-display text-base font-semibold text-white">Universe &amp; output</h2>
+          <h2 className="font-display text-base font-semibold text-slate-900">Universe &amp; output</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Field label="Index / exchange list">
               <select
@@ -88,29 +88,29 @@ export function SettingsView({ criteria, onSave, onCancel }: Props) {
                 onChange={(e) => set("min_volume")(parseFloat(e.target.value) || 0)}
               />
             </Field>
-            <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-300 sm:col-span-2">
+            <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-700 sm:col-span-2">
               <input
                 type="checkbox"
                 checked={c.skip_news}
                 onChange={(e) => set("skip_news")(e.target.checked)}
-                className="rounded border-white/20 bg-night-850 text-mint-500"
+                className="rounded border-slate-300 bg-white text-mint-600"
               />
               Skip news (faster; no headline penalty)
             </label>
-            <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-300 sm:col-span-2">
+            <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-700 sm:col-span-2">
               <input
                 type="checkbox"
                 checked={c.require_above_sma200}
                 onChange={(e) => set("require_above_sma200")(e.target.checked)}
-                className="rounded border-white/20 bg-night-850 text-mint-500"
+                className="rounded border-slate-300 bg-white text-mint-600"
               />
               Require close &gt; SMA(200) to enter the ranked set
             </label>
           </div>
         </section>
 
-        <section className="border-t border-white/10 pt-8">
-          <h2 className="font-display text-base font-semibold text-white">Scoring bands</h2>
+        <section className="border-t border-slate-200 pt-8">
+          <h2 className="font-display text-base font-semibold text-slate-900">Scoring bands</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Field label="RSI neutral band — low">
               <input
@@ -192,7 +192,7 @@ export function SettingsView({ criteria, onSave, onCancel }: Props) {
           </div>
         </section>
 
-        <div className="flex flex-wrap gap-3 border-t border-white/10 pt-6">
+        <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-6">
           <button
             type="button"
             className="btn-primary"

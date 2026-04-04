@@ -11,6 +11,7 @@ from sherpa.execution.paper import PaperBroker
 from sherpa.execution.simulation import read_paper_simulation_state, reset_paper_simulation
 from sherpa.execution.simulation_paths import simulation_portfolio_path, simulation_profile_slug
 from sherpa.providers import create_news_provider, create_price_provider
+from sherpa.providers.prices import normalize_yfinance_history
 from sherpa.signals.engine import Side, SignalEngine
 from sherpa.technical.indicators import compute_features
 from sherpa.universe.indices import refresh_universe_cache
@@ -51,22 +52,29 @@ def service_scan(*, top: int, skip_news: bool) -> ScanResponse:
     engine = SignalEngine()
     tickers = get_sp500_tickers()[:top]
     rows: list[SignalRow] = []
+    scanned = 0
     for sym in tickers:
-        bars = prices.history_daily(sym, days=120)
-        feats = compute_features(bars)
-        news = [] if skip_news else news_p.headlines_for_symbol(sym, limit=8)
-        sig = engine.evaluate(sym, feats, news)
-        if sig.side == Side.FLAT:
-            continue
-        rows.append(
-            SignalRow(
-                symbol=sym,
-                side=sig.side.value,
-                score=float(sig.score),
-                reasons=list(sig.reasons),
+        try:
+            bars = prices.history_daily(sym, days=120)
+            if not bars:
+                continue
+            feats = compute_features(bars)
+            news = [] if skip_news else news_p.headlines_for_symbol(sym, limit=8)
+            sig = engine.evaluate(sym, feats, news)
+            scanned += 1
+            if sig.side == Side.FLAT:
+                continue
+            rows.append(
+                SignalRow(
+                    symbol=sym,
+                    side=sig.side.value,
+                    score=float(sig.score),
+                    reasons=list(sig.reasons),
+                )
             )
-        )
-    return ScanResponse(signals=rows, scanned=len(tickers))
+        except Exception:
+            logger.exception("scan failed for symbol %s", sym)
+    return ScanResponse(signals=rows, scanned=scanned)
 
 
 def service_simulate_reset(*, profile: str, cash: float) -> str:
@@ -131,7 +139,7 @@ def service_trade_paper(body: TradeBody) -> TradeResponse:
     if not isinstance(br, PaperBroker):
         raise RuntimeError("expected paper broker")
     ticker = yf.Ticker(sym)
-    hist = ticker.history(period="5d")
+    hist = normalize_yfinance_history(ticker.history(period="5d"))
     if hist is None or hist.empty:
         raise ValueError(f"No price data for {sym}")
     last = float(hist["Close"].iloc[-1])
@@ -202,7 +210,7 @@ def service_paper_tick(body: PaperTickBody) -> dict:
     if not isinstance(br, PaperBroker):
         raise RuntimeError("expected paper broker")
     ticker = yf.Ticker(sym)
-    hist = ticker.history(period="5d")
+    hist = normalize_yfinance_history(ticker.history(period="5d"))
     if hist is None or hist.empty:
         raise ValueError(f"No price data for {sym}")
     last = float(hist["Close"].iloc[-1])

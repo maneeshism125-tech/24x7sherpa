@@ -98,4 +98,14 @@ class SignalEngine:
             reasons.append("downtrend_rally")
             return Signal(symbol, Side.SHORT, 0.5, tuple(reasons))
 
+        # Fallback so scans usually surface names (strict cross/pullbacks are rare on a given day).
+        if float(sma20) > float(sma50):
+            reasons.append("bullish_structure")
+            reasons.append(f"rsi={rsi:.1f}")
+            return Signal(symbol, Side.LONG, 0.25, tuple(reasons))
+        if float(sma20) < float(sma50):
+            reasons.append("bearish_structure")
+            reasons.append(f"rsi={rsi:.1f}")
+            return Signal(symbol, Side.SHORT, 0.25, tuple(reasons))
+
         return Signal(symbol, Side.FLAT, 0.0, ("no_setup",))

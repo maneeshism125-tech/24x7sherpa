@@ -34,7 +34,11 @@ class NewsRSSProvider:
         except httpx.HTTPError as e:
             logger.warning("RSS fetch failed for %s: %s", symbol, e)
             return []
-        return _parse_google_news_rss(r.text, limit=limit)
+        try:
+            return _parse_google_news_rss(r.text, limit=limit)
+        except ET.ParseError:
+            logger.warning("RSS XML parse failed for %s", symbol)
+            return []
 
 
 class NewsAPIProvider:

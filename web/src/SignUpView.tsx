@@ -18,16 +18,16 @@ export function SignUpView({ onBack }: Props) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="glass w-full max-w-md p-8">
-        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-500">
+        <p className="font-display text-sm font-semibold uppercase tracking-widest text-mint-600">
           24×7 Sherpa
         </p>
-        <h1 className="font-display mt-2 text-2xl font-bold text-white">Create account</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <h1 className="font-display mt-2 text-2xl font-bold text-slate-900">Create account</h1>
+        <p className="mt-2 text-sm text-slate-600">
           Choose a user id (letters, numbers, underscore), your email, mailing address, and a password
           (8+ characters). You will be signed in after registering.
         </p>
         {err && (
-          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
             {err}
           </p>
         )}

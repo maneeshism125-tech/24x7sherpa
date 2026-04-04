@@ -16,6 +16,19 @@ def _db_path(data_dir: Path) -> Path:
     return data_dir / "users.sqlite"
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    cur = conn.execute("PRAGMA table_info(users)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "email" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    if "address" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN address TEXT")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique "
+        "ON users(email) WHERE email IS NOT NULL AND trim(email) != ''"
+    )
+
+
 def init_db(data_dir: Path) -> None:
     path = _db_path(data_dir)
     with _lock:
@@ -32,6 +45,7 @@ def init_db(data_dir: Path) -> None:
                 )
                 """
             )
+            _migrate(conn)
             conn.commit()
         finally:
             conn.close()
@@ -56,15 +70,22 @@ def create_user(
     user_id: str,
     password_hash: str,
     is_admin: bool = False,
+    email: str | None = None,
+    address: str | None = None,
 ) -> None:
     uid = user_id.strip()
+    em = email.strip().lower() if email and email.strip() else None
+    addr = address.strip() if address and address.strip() else None
     path = _db_path(data_dir)
     with _lock:
         conn = sqlite3.connect(str(path), check_same_thread=False)
         try:
             conn.execute(
-                "INSERT INTO users (user_id, password_hash, is_admin, disabled, created_at) VALUES (?,?,?,?,?)",
-                (uid, password_hash, 1 if is_admin else 0, 0, time.time()),
+                """
+                INSERT INTO users (user_id, password_hash, is_admin, disabled, created_at, email, address)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                (uid, password_hash, 1 if is_admin else 0, 0, time.time(), em, addr),
             )
             conn.commit()
         finally:
@@ -81,7 +102,10 @@ def get_user_row(data_dir: Path, user_id: str) -> dict[str, Any] | None:
         conn.row_factory = sqlite3.Row
         try:
             cur = conn.execute(
-                "SELECT user_id, password_hash, is_admin, disabled, created_at FROM users WHERE user_id = ? COLLATE NOCASE",
+                """
+                SELECT user_id, password_hash, is_admin, disabled, created_at, email, address
+                FROM users WHERE user_id = ? COLLATE NOCASE
+                """,
                 (uid,),
             )
             row = cur.fetchone()
@@ -93,7 +117,36 @@ def get_user_row(data_dir: Path, user_id: str) -> dict[str, Any] | None:
                 "is_admin": bool(row["is_admin"]),
                 "disabled": bool(row["disabled"]),
                 "created_at": float(row["created_at"]),
+                "email": row["email"],
+                "address": row["address"],
             }
+        finally:
+            conn.close()
+
+
+def is_email_taken(data_dir: Path, email: str, *, except_user_id: str | None = None) -> bool:
+    em = email.strip().lower()
+    path = _db_path(data_dir)
+    if not path.exists():
+        return False
+    with _lock:
+        conn = sqlite3.connect(str(path), check_same_thread=False)
+        try:
+            if except_user_id:
+                row = conn.execute(
+                    """
+                    SELECT 1 FROM users
+                    WHERE lower(trim(email)) = ? AND lower(user_id) != lower(?)
+                    LIMIT 1
+                    """,
+                    (em, except_user_id.strip()),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT 1 FROM users WHERE lower(trim(email)) = ? LIMIT 1",
+                    (em,),
+                ).fetchone()
+            return row is not None
         finally:
             conn.close()
 
@@ -107,7 +160,10 @@ def list_users(data_dir: Path) -> list[dict[str, Any]]:
         conn.row_factory = sqlite3.Row
         try:
             cur = conn.execute(
-                "SELECT user_id, is_admin, disabled, created_at FROM users ORDER BY user_id COLLATE NOCASE"
+                """
+                SELECT user_id, is_admin, disabled, created_at, email, address
+                FROM users ORDER BY user_id COLLATE NOCASE
+                """
             )
             return [
                 {
@@ -115,6 +171,8 @@ def list_users(data_dir: Path) -> list[dict[str, Any]]:
                     "is_admin": bool(r["is_admin"]),
                     "disabled": bool(r["disabled"]),
                     "created_at": float(r["created_at"]),
+                    "email": r["email"],
+                    "address": r["address"],
                 }
                 for r in cur.fetchall()
             ]
@@ -122,27 +180,40 @@ def list_users(data_dir: Path) -> list[dict[str, Any]]:
             conn.close()
 
 
-def update_user(
-    data_dir: Path,
-    user_id: str,
-    *,
-    password_hash: str | None = None,
-    is_admin: bool | None = None,
-    disabled: bool | None = None,
-) -> bool:
+def update_user(data_dir: Path, user_id: str, updates: dict[str, Any]) -> bool:
+    """
+    Apply partial updates. Keys: password_hash, is_admin, disabled, email, address.
+    Omitted keys are left unchanged. ``email`` / ``address`` may be set to None to clear.
+    """
     uid = user_id.strip()
     path = _db_path(data_dir)
     fields: list[str] = []
     vals: list[Any] = []
-    if password_hash is not None:
+    if "password_hash" in updates:
         fields.append("password_hash = ?")
-        vals.append(password_hash)
-    if is_admin is not None:
+        vals.append(updates["password_hash"])
+    if "is_admin" in updates:
         fields.append("is_admin = ?")
-        vals.append(1 if is_admin else 0)
-    if disabled is not None:
+        vals.append(1 if updates["is_admin"] else 0)
+    if "disabled" in updates:
         fields.append("disabled = ?")
-        vals.append(1 if disabled else 0)
+        vals.append(1 if updates["disabled"] else 0)
+    if "email" in updates:
+        em = updates["email"]
+        if em is not None and str(em).strip():
+            em = str(em).strip().lower()
+        else:
+            em = None
+        fields.append("email = ?")
+        vals.append(em)
+    if "address" in updates:
+        addr = updates["address"]
+        if addr is not None and str(addr).strip():
+            addr = str(addr).strip()
+        else:
+            addr = None
+        fields.append("address = ?")
+        vals.append(addr)
     if not fields:
         return False
     vals.append(uid)

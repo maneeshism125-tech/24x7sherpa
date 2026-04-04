@@ -7,7 +7,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api import services
-from api.deps import get_current_user
+from api.user_store import get_user_row
+from sherpa.config import Settings
+from api.deps import get_current_user, settings_dep
 from api.schemas import (
     AccountResponse,
     CurrentUser,
@@ -27,8 +29,24 @@ router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
 
 @router.get("/auth/me", response_model=MeResponse)
-def auth_me(user: Annotated[CurrentUser, Depends(get_current_user)]) -> MeResponse:
-    return MeResponse(user_id=user.user_id, is_admin=user.is_admin)
+def auth_me(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(settings_dep)],
+) -> MeResponse:
+    row = get_user_row(settings.data_dir, user.user_id)
+    if not row:
+        return MeResponse(
+            user_id=user.user_id,
+            is_admin=user.is_admin,
+            email=None,
+            address=None,
+        )
+    return MeResponse(
+        user_id=row["user_id"],
+        is_admin=row["is_admin"],
+        email=row.get("email"),
+        address=row.get("address"),
+    )
 
 
 @router.post("/universe/refresh")

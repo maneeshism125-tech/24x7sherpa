@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class SimulateResetBody(BaseModel):
@@ -121,6 +121,7 @@ class CurrentUser(BaseModel):
 
 class AuthConfigResponse(BaseModel):
     auth_required: bool
+    allow_signup: bool
 
 
 class LoginBody(BaseModel):
@@ -137,6 +138,21 @@ class LoginResponse(BaseModel):
 class MeResponse(BaseModel):
     user_id: str
     is_admin: bool
+    email: str | None = None
+    address: str | None = None
+
+
+class RegisterBody(BaseModel):
+    email: EmailStr
+    user_id: str = Field(
+        ...,
+        min_length=3,
+        max_length=32,
+        pattern=r"^[a-zA-Z0-9_]+$",
+        description="Letters, digits, underscore only",
+    )
+    address: str = Field(..., min_length=4, max_length=512)
+    password: str = Field(..., min_length=8, max_length=256)
 
 
 class UserAdminRow(BaseModel):
@@ -144,6 +160,8 @@ class UserAdminRow(BaseModel):
     is_admin: bool
     disabled: bool
     created_at: float
+    email: str | None = None
+    address: str | None = None
 
 
 class AdminCreateUserBody(BaseModel):
@@ -156,9 +174,13 @@ class AdminCreateUserBody(BaseModel):
     )
     password: str = Field(..., min_length=8, max_length=256)
     is_admin: bool = False
+    email: EmailStr | None = None
+    address: str | None = Field(None, max_length=512)
 
 
 class AdminPatchUserBody(BaseModel):
     password: str | None = Field(None, min_length=8, max_length=256)
     is_admin: bool | None = None
     disabled: bool | None = None
+    email: EmailStr | None = None
+    address: str | None = Field(None, max_length=512)

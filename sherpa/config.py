@@ -59,6 +59,23 @@ class Settings(BaseSettings):
         validation_alias="SHERPA_BOOTSTRAP_ADMIN_PASSWORD",
         description="If set and DB has no users, create admin user 'admin' with this password.",
     )
+    allow_public_signup: bool = Field(
+        default=True,
+        validation_alias="SHERPA_ALLOW_PUBLIC_SIGNUP",
+        description="Allow POST /api/auth/register for self-service accounts.",
+    )
+
+    @field_validator("allow_public_signup", mode="before")
+    @classmethod
+    def _coerce_allow_signup(cls, v: object) -> bool:
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return True
+        s = str(v).strip().lower()
+        if s in ("0", "false", "no", "off"):
+            return False
+        return True
 
     @field_validator("auth_disabled", mode="before")
     @classmethod

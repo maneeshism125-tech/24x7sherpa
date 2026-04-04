@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AdminView } from "./AdminView";
 import { useAuth } from "./AuthContext";
-import { LoginView } from "./LoginView";
+import { AuthEntry } from "./AuthEntry";
 import { apiGet, apiGetOrNull, apiPost } from "./lib/api";
 import { loadPickCriteria, type PickCriteria, universeLabel } from "./pickCriteria";
 import { SettingsView } from "./SettingsView";
@@ -165,7 +165,7 @@ export default function App() {
   }
 
   if (authRequired && !user) {
-    return <LoginView />;
+    return <AuthEntry />;
   }
 
   if (page === "admin" && user?.is_admin) {

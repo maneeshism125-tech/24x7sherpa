@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "./AuthContext";
 
-export function LoginView() {
+type Props = {
+  onCreateAccount?: () => void;
+};
+
+export function LoginView({ onCreateAccount }: Props) {
   const { login } = useAuth();
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
@@ -16,9 +20,26 @@ export function LoginView() {
         </p>
         <h1 className="font-display mt-2 text-2xl font-bold text-white">Sign in</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Use the user id and password from your administrator. First deploy creates{" "}
-          <code className="text-slate-300">admin</code> / <code className="text-slate-300">changeme</code>{" "}
-          unless <code className="text-slate-300">SHERPA_BOOTSTRAP_ADMIN_PASSWORD</code> is set.
+          {onCreateAccount ? (
+            <>
+              Sign in with your user id and password. New here? Use{" "}
+              <button
+                type="button"
+                className="text-mint-400 underline decoration-mint-500/50 underline-offset-2 hover:text-mint-300"
+                onClick={onCreateAccount}
+              >
+                Create account
+              </button>
+              . The first server user is still <code className="text-slate-300">admin</code> /{" "}
+              <code className="text-slate-300">changeme</code> unless bootstrap password is set.
+            </>
+          ) : (
+            <>
+              Public signup is turned off — use an account from your administrator. First deploy:{" "}
+              <code className="text-slate-300">admin</code> / <code className="text-slate-300">changeme</code>{" "}
+              unless <code className="text-slate-300">SHERPA_BOOTSTRAP_ADMIN_PASSWORD</code> is set.
+            </>
+          )}
         </p>
         {err && (
           <p className="mt-4 rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -66,6 +87,12 @@ export function LoginView() {
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        {onCreateAccount && (
+          <p className="mt-4 text-center text-xs text-slate-600">
+            By creating an account you confirm your details are accurate. This tool is for educational use
+            only.
+          </p>
+        )}
       </div>
     </div>
   );

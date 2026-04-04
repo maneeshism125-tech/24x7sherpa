@@ -67,6 +67,14 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return handleJson<T>(r);
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  const r = await fetch(`${API}${path}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleJson<T>(r);
+}
+
 /** Public POST without Authorization (e.g. login). */
 export async function apiPostPublic<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch(`${API}${path}`, {

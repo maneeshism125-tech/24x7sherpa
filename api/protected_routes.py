@@ -15,6 +15,8 @@ from api.schemas import (
     CurrentUser,
     DailyRecommendationsResponse,
     MeResponse,
+    OpenOrderRow,
+    PaperTickBody,
     PickCriteriaBody,
     ScanResponse,
     SimulateResetBody,
@@ -155,12 +157,36 @@ async def api_account_paper(profile: str = Query("default", max_length=64)) -> A
 @router.post("/trade/paper", response_model=TradeResponse)
 async def api_trade_paper(body: TradeBody) -> TradeResponse:
     try:
-        return await asyncio.to_thread(
-            services.service_trade_paper,
-            symbol=body.symbol,
-            side=body.side,
-            qty=body.qty,
-            profile=body.profile,
-        )
+        return await asyncio.to_thread(services.service_trade_paper, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/trade/paper/orders", response_model=list[OpenOrderRow])
+async def api_trade_paper_orders(
+    profile: str = Query("default", max_length=64),
+) -> list[OpenOrderRow]:
+    try:
+        return await asyncio.to_thread(services.service_paper_open_orders, profile=profile)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.delete("/trade/paper/orders/{order_id}")
+async def api_trade_paper_cancel_order(
+    order_id: str,
+    profile: str = Query("default", max_length=64),
+) -> dict:
+    try:
+        await asyncio.to_thread(services.service_paper_cancel_order, profile=profile, order_id=order_id)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/trade/paper/tick")
+async def api_trade_paper_tick(body: PaperTickBody) -> dict:
+    try:
+        return await asyncio.to_thread(services.service_paper_tick, body)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AdminView } from "./AdminView";
 import { useAuth } from "./AuthContext";
 import { AuthEntry } from "./AuthEntry";
-import { apiGet, apiGetOrNull, apiPost } from "./lib/api";
+import { apiDelete, apiGet, apiGetOrNull, apiPost } from "./lib/api";
 import { loadPickCriteria, type PickCriteria, universeLabel } from "./pickCriteria";
 import { SettingsView } from "./SettingsView";
 
@@ -63,6 +63,21 @@ type DailyRecResult = {
   criteria: PickCriteria;
 };
 
+type OpenOrderRow = {
+  id: string;
+  symbol: string;
+  side: string;
+  qty: number;
+  order_type: string;
+  limit_price: number | null;
+  stop_price: number | null;
+  stop_triggered: boolean;
+  status: string;
+  created_at: string;
+};
+
+type TradeOrderType = "market" | "limit" | "stop" | "stop_limit";
+
 function formatMoney(n: number) {
   return n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -87,6 +102,10 @@ export default function App() {
   const [tradeSym, setTradeSym] = useState("AAPL");
   const [tradeSide, setTradeSide] = useState<"buy" | "sell">("buy");
   const [tradeQty, setTradeQty] = useState("1");
+  const [tradeOrderType, setTradeOrderType] = useState<TradeOrderType>("market");
+  const [tradeLimitPx, setTradeLimitPx] = useState("");
+  const [tradeStopPx, setTradeStopPx] = useState("");
+  const [openOrders, setOpenOrders] = useState<OpenOrderRow[]>([]);
   const [scanTop, setScanTop] = useState("15");
   const [scanSkipNews, setScanSkipNews] = useState(false);
 
@@ -135,10 +154,24 @@ export default function App() {
     });
   }, [profile, run]);
 
+  const loadOpenOrders = useCallback(async () => {
+    try {
+      const q = new URLSearchParams({ profile });
+      const data = await apiGet<OpenOrderRow[]>(`/api/trade/paper/orders?${q}`);
+      setOpenOrders(data);
+    } catch {
+      setOpenOrders([]);
+    }
+  }, [profile]);
+
   useEffect(() => {
     void loadStatus().catch(() => setSim(null));
     void loadAccount().catch(() => setAcct(null));
   }, [loadAccount, loadStatus]);
+
+  useEffect(() => {
+    void loadOpenOrders();
+  }, [loadOpenOrders]);
 
   useEffect(() => {
     setUniverseRefresh(pickCriteria.universe_id);
@@ -346,15 +379,45 @@ export default function App() {
 
         <section className="glass p-6">
           <h2 className="font-display text-lg font-semibold text-white">Broker view (paper)</h2>
-          <p className="mt-1 text-sm text-slate-400">Same profile as sandbox — cash and equity.</p>
-          <button
-            type="button"
-            className="btn-ghost mt-5"
-            disabled={busy !== null}
-            onClick={() => loadAccount()}
-          >
-            {busy === "account" ? "Loading…" : "Refresh account"}
-          </button>
+          <p className="mt-1 text-sm text-slate-400">
+            Same simulation profile as sandbox. Fills use Yahoo&apos;s latest close per symbol plus a small
+            slippage model. <strong>Limit</strong> orders execute when the quote crosses your price;
+            <strong> Stop</strong> is stop-market (sell: fires when price falls to stop; buy: when it rises);{" "}
+            <strong>Stop-limit</strong> arms on the stop, then rests a limit. Not real brokerage execution.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={busy !== null}
+              onClick={() => loadAccount()}
+            >
+              {busy === "account" ? "Loading…" : "Refresh account"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={busy !== null}
+              onClick={() => void loadOpenOrders()}
+            >
+              Refresh working orders
+            </button>
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={busy !== null}
+              onClick={() =>
+                run("tick", async () => {
+                  await apiPost("/api/trade/paper/tick", { symbol: tradeSym.trim(), profile });
+                  await loadOpenOrders();
+                  await loadAccount();
+                  await loadStatus();
+                })
+              }
+            >
+              {busy === "tick" ? "Updating…" : `Update quote & fills (${tradeSym || "SYM"})`}
+            </button>
+          </div>
           {acct && (
             <dl className="mt-6 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
               <div>
@@ -372,54 +435,178 @@ export default function App() {
             </dl>
           )}
           <div className="mt-8 border-t border-white/10 pt-6">
-            <h3 className="font-medium text-white">Paper market order</h3>
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <input
-                className="input sm:col-span-1"
-                value={tradeSym}
-                onChange={(e) => setTradeSym(e.target.value.toUpperCase())}
-                placeholder="AAPL"
-                aria-label="Symbol"
-              />
-              <select
-                className="input sm:col-span-1"
-                value={tradeSide}
-                onChange={(e) => setTradeSide(e.target.value as "buy" | "sell")}
-                aria-label="Side"
-              >
-                <option value="buy">Buy</option>
-                <option value="sell">Sell</option>
-              </select>
-              <input
-                className="input sm:col-span-1"
-                value={tradeQty}
-                onChange={(e) => setTradeQty(e.target.value)}
-                inputMode="numeric"
-                placeholder="Qty"
-                aria-label="Quantity"
-              />
+            <h3 className="font-medium text-white">Place order</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Market fills immediately after the quote refresh inside submit. Working orders need periodic{" "}
+              <em>Update quote &amp; fills</em> (or another submit on the same symbol).
+            </p>
+            <div className="mt-4 flex flex-col gap-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Symbol</label>
+                  <input
+                    className="input"
+                    value={tradeSym}
+                    onChange={(e) => setTradeSym(e.target.value.toUpperCase())}
+                    placeholder="AAPL"
+                    aria-label="Symbol"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Side</label>
+                  <select
+                    className="input"
+                    value={tradeSide}
+                    onChange={(e) => setTradeSide(e.target.value as "buy" | "sell")}
+                    aria-label="Side"
+                  >
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Quantity</label>
+                  <input
+                    className="input"
+                    value={tradeQty}
+                    onChange={(e) => setTradeQty(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Shares"
+                    aria-label="Quantity"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Order type</label>
+                  <select
+                    className="input"
+                    value={tradeOrderType}
+                    onChange={(e) => setTradeOrderType(e.target.value as TradeOrderType)}
+                    aria-label="Order type"
+                  >
+                    <option value="market">Market</option>
+                    <option value="limit">Limit</option>
+                    <option value="stop">Stop (market after trigger)</option>
+                    <option value="stop_limit">Stop-limit</option>
+                  </select>
+                </div>
+              </div>
+              {(tradeOrderType === "limit" || tradeOrderType === "stop_limit") && (
+                <div className="max-w-xs">
+                  <label className="mb-1 block text-xs text-slate-500">Limit price</label>
+                  <input
+                    className="input font-mono"
+                    value={tradeLimitPx}
+                    onChange={(e) => setTradeLimitPx(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="e.g. 150.00"
+                  />
+                </div>
+              )}
+              {(tradeOrderType === "stop" || tradeOrderType === "stop_limit") && (
+                <div className="max-w-xs">
+                  <label className="mb-1 block text-xs text-slate-500">Stop (trigger) price</label>
+                  <input
+                    className="input font-mono"
+                    value={tradeStopPx}
+                    onChange={(e) => setTradeStopPx(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="e.g. 145.00"
+                  />
+                </div>
+              )}
               <button
                 type="button"
-                className="btn-primary sm:col-span-1"
+                className="btn-primary w-fit"
                 disabled={busy !== null}
                 onClick={() =>
                   run("trade", async () => {
                     const qty = parseInt(tradeQty, 10);
                     if (!Number.isFinite(qty) || qty < 1) throw new Error("Invalid quantity");
-                    await apiPost("/api/trade/paper", {
-                      symbol: tradeSym,
+                    const body: Record<string, string | number> = {
+                      symbol: tradeSym.trim(),
                       side: tradeSide,
                       qty,
                       profile,
-                    });
+                      order_type: tradeOrderType,
+                    };
+                    if (tradeOrderType === "limit" || tradeOrderType === "stop_limit") {
+                      const lp = parseFloat(tradeLimitPx);
+                      if (!Number.isFinite(lp) || lp <= 0) throw new Error("Enter a valid limit price");
+                      body.limit_price = lp;
+                    }
+                    if (tradeOrderType === "stop" || tradeOrderType === "stop_limit") {
+                      const sp = parseFloat(tradeStopPx);
+                      if (!Number.isFinite(sp) || sp <= 0) throw new Error("Enter a valid stop price");
+                      body.stop_price = sp;
+                    }
+                    await apiPost("/api/trade/paper", body);
                     await loadStatus();
                     await loadAccount();
+                    await loadOpenOrders();
                   })
                 }
               >
-                {busy === "trade" ? "Submitting…" : "Submit"}
+                {busy === "trade" ? "Submitting…" : "Submit order"}
               </button>
             </div>
+          </div>
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <h3 className="font-medium text-white">Working orders</h3>
+            {openOrders.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">No open limit/stop orders for this profile.</p>
+            ) : (
+              <div className="mt-3 max-h-56 overflow-auto rounded-xl border border-white/10">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead className="sticky top-0 bg-night-900">
+                    <tr className="border-b border-white/10 text-slate-500">
+                      <th className="px-3 py-2 font-medium">Symbol</th>
+                      <th className="px-3 py-2 font-medium">Side</th>
+                      <th className="px-3 py-2 font-medium">Type</th>
+                      <th className="px-3 py-2 font-medium">Qty</th>
+                      <th className="px-3 py-2 font-medium">Stop</th>
+                      <th className="px-3 py-2 font-medium">Limit</th>
+                      <th className="px-3 py-2 font-medium">Armed</th>
+                      <th className="px-3 py-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openOrders.map((o) => (
+                      <tr key={o.id} className="border-b border-white/5 font-mono text-slate-300">
+                        <td className="px-3 py-2 text-mint-400">{o.symbol}</td>
+                        <td className="px-3 py-2 uppercase">{o.side}</td>
+                        <td className="px-3 py-2">{o.order_type.replace("_", "-")}</td>
+                        <td className="px-3 py-2">{o.qty}</td>
+                        <td className="px-3 py-2">
+                          {o.stop_price != null ? formatMoney(o.stop_price) : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {o.limit_price != null ? formatMoney(o.limit_price) : "—"}
+                        </td>
+                        <td className="px-3 py-2">{o.stop_triggered ? "yes" : "—"}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className="text-amber-300/90 underline hover:text-amber-200"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              run(`cancel-${o.id}`, async () => {
+                                const q = new URLSearchParams({ profile });
+                                await apiDelete<{ ok: boolean }>(
+                                  `/api/trade/paper/orders/${encodeURIComponent(o.id)}?${q}`,
+                                );
+                                await loadOpenOrders();
+                              })
+                            }
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </section>
 

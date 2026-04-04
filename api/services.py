@@ -5,7 +5,7 @@ import logging
 import yfinance as yf
 
 from sherpa.cli_settings import resolve_settings
-from sherpa.execution.base import OrderRequest, OrderSide
+from sherpa.execution.base import OrderSide
 from sherpa.execution.factory import create_broker
 from sherpa.execution.paper import PaperBroker
 from sherpa.execution.simulation import read_paper_simulation_state, reset_paper_simulation
@@ -20,11 +20,14 @@ from api.schemas import (
     AccountResponse,
     DailyPickRow,
     DailyRecommendationsResponse,
+    OpenOrderRow,
+    PaperTickBody,
     PickCriteriaBody,
     PositionRow,
     ScanResponse,
     SignalRow,
     SimulationStatusResponse,
+    TradeBody,
     TradeResponse,
 )
 
@@ -121,9 +124,9 @@ def service_account_paper(*, profile: str) -> AccountResponse:
     )
 
 
-def service_trade_paper(*, symbol: str, side: str, qty: int, profile: str) -> TradeResponse:
-    settings = resolve_settings(profile=profile)
-    sym = symbol.upper().strip()
+def service_trade_paper(body: TradeBody) -> TradeResponse:
+    settings = resolve_settings(profile=(body.profile or "default").strip() or "default")
+    sym = body.symbol.upper().strip()
     br = create_broker("paper", settings)
     if not isinstance(br, PaperBroker):
         raise RuntimeError("expected paper broker")
@@ -132,16 +135,84 @@ def service_trade_paper(*, symbol: str, side: str, qty: int, profile: str) -> Tr
     if hist is None or hist.empty:
         raise ValueError(f"No price data for {sym}")
     last = float(hist["Close"].iloc[-1])
-    br.set_last_price(sym, last)
-    oside = OrderSide.BUY if side == "buy" else OrderSide.SELL
-    res = br.submit_market_order(OrderRequest(symbol=sym, qty=qty, side=oside))
+    br.refresh_symbol_from_last(sym, last)
+    oside = OrderSide.BUY if body.side == "buy" else OrderSide.SELL
+    res = br.submit_paper_order(
+        symbol=sym,
+        side=oside,
+        qty=body.qty,
+        order_type=body.order_type,
+        limit_price=body.limit_price,
+        stop_price=body.stop_price,
+    )
+    detail = None
+    if res.status == "accepted":
+        detail = (
+            "Order accepted and working. Refresh the quote on this symbol (or place another order) "
+            "to pull the latest price and evaluate limit/stop fills."
+        )
     return TradeResponse(
         status=res.status,
         broker_order_id=res.broker_order_id,
         filled_qty=res.filled_qty,
         avg_fill_price=res.avg_fill_price,
         symbol=sym,
+        order_type=body.order_type,
+        detail=detail,
     )
+
+
+def service_paper_open_orders(*, profile: str) -> list[OpenOrderRow]:
+    settings = resolve_settings(profile=profile)
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    out: list[OpenOrderRow] = []
+    for o in br.list_open_orders():
+        out.append(
+            OpenOrderRow(
+                id=o["id"],
+                symbol=o["symbol"],
+                side=o["side"],
+                qty=int(o["qty"]),
+                order_type=o["order_type"],
+                limit_price=o.get("limit_price"),
+                stop_price=o.get("stop_price"),
+                stop_triggered=bool(o.get("stop_triggered", False)),
+                status=o["status"],
+                created_at=str(o.get("created_at", "")),
+            )
+        )
+    return out
+
+
+def service_paper_cancel_order(*, profile: str, order_id: str) -> None:
+    settings = resolve_settings(profile=profile)
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    if not br.cancel_order(order_id):
+        raise ValueError("Order not found or not cancellable (already filled or cancelled).")
+
+
+def service_paper_tick(body: PaperTickBody) -> dict:
+    settings = resolve_settings(profile=(body.profile or "default").strip() or "default")
+    sym = body.symbol.upper().strip()
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    ticker = yf.Ticker(sym)
+    hist = ticker.history(period="5d")
+    if hist is None or hist.empty:
+        raise ValueError(f"No price data for {sym}")
+    last = float(hist["Close"].iloc[-1])
+    br.refresh_symbol_from_last(sym, last)
+    return {
+        "ok": True,
+        "symbol": sym,
+        "last": last,
+        "working_orders": len(br.list_open_orders()),
+    }
 
 
 def service_daily_recommendations(*, body: PickCriteriaBody | None = None) -> DailyRecommendationsResponse:

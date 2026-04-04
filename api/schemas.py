@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class SimulateResetBody(BaseModel):
@@ -9,10 +11,15 @@ class SimulateResetBody(BaseModel):
 
 
 class TradeBody(BaseModel):
+    """Paper trade request (market, limit, stop / stop-market, stop-limit)."""
+
     symbol: str = Field(..., min_length=1, max_length=16)
     side: str = Field(...)
     qty: int = Field(..., ge=1, le=1_000_000)
     profile: str = Field(default="default", max_length=64)
+    order_type: Literal["market", "limit", "stop", "stop_limit"] = "market"
+    limit_price: float | None = Field(None, gt=0)
+    stop_price: float | None = Field(None, gt=0)
 
     @field_validator("side")
     @classmethod
@@ -21,6 +28,17 @@ class TradeBody(BaseModel):
         if s not in ("buy", "sell"):
             raise ValueError("side must be buy or sell")
         return s
+
+    @model_validator(mode="after")
+    def validate_prices_for_order_type(self) -> TradeBody:
+        ot = self.order_type
+        if ot == "limit" and self.limit_price is None:
+            raise ValueError("limit_price is required for limit orders")
+        if ot == "stop" and self.stop_price is None:
+            raise ValueError("stop_price is required for stop (stop-market) orders")
+        if ot == "stop_limit" and (self.stop_price is None or self.limit_price is None):
+            raise ValueError("Both stop_price and limit_price are required for stop-limit orders")
+        return self
 
 
 class SignalRow(BaseModel):
@@ -61,6 +79,26 @@ class TradeResponse(BaseModel):
     filled_qty: int
     avg_fill_price: float | None
     symbol: str
+    order_type: str | None = None
+    detail: str | None = None
+
+
+class OpenOrderRow(BaseModel):
+    id: str
+    symbol: str
+    side: str
+    qty: int
+    order_type: str
+    limit_price: float | None = None
+    stop_price: float | None = None
+    stop_triggered: bool = False
+    status: str
+    created_at: str
+
+
+class PaperTickBody(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=16)
+    profile: str = Field(default="default", max_length=64)
 
 
 class ScanResponse(BaseModel):

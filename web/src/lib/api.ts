@@ -32,7 +32,7 @@ function onUnauthorized(): void {
 }
 
 async function handleJson<T>(res: Response): Promise<T> {
-  if (res.status === 401) onUnauthorized();
+  if (res.status === 401 && getToken()) onUnauthorized();
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<T>;
 }

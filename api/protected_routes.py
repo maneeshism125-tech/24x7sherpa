@@ -17,8 +17,11 @@ from api.schemas import (
     DailyRecommendationsResponse,
     MeResponse,
     OpenOrderRow,
+    OptionsPositionsResponse,
     OptionsRecommendationsResponse,
+    OptionsTradeBody,
     OptionsTradeRecommendation,
+    OptionsTradeResponse,
     PaperTickBody,
     PickCriteriaBody,
     ScanResponse,
@@ -211,5 +214,33 @@ async def api_trade_paper_cancel_order(
 async def api_trade_paper_tick(body: PaperTickBody) -> dict:
     try:
         return await asyncio.to_thread(services.service_paper_tick, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/trade/paper/options", response_model=OptionsTradeResponse)
+async def api_trade_options_paper(body: OptionsTradeBody) -> OptionsTradeResponse:
+    try:
+        return await asyncio.to_thread(services.service_trade_options_paper, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/trade/paper/options/positions", response_model=OptionsPositionsResponse)
+async def api_options_paper_positions(
+    profile: str = Query("default", max_length=64),
+) -> OptionsPositionsResponse:
+    try:
+        return await asyncio.to_thread(services.service_options_paper_positions, profile=profile)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/trade/paper/options/refresh-marks")
+async def api_options_paper_refresh_marks(
+    profile: str = Query("default", max_length=64),
+) -> dict:
+    try:
+        return await asyncio.to_thread(services.service_options_paper_refresh_marks, profile=profile)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

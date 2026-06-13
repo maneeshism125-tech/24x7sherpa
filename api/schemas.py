@@ -255,3 +255,53 @@ class OptionsRecommendationsResponse(BaseModel):
     dow_jones: list[OptionsTradeRecommendation]
     nasdaq: list[OptionsTradeRecommendation]
     disclaimer: str
+
+
+class OptionsPositionRow(BaseModel):
+    position_key: str
+    underlying: str
+    expiry: str
+    strike: float
+    option_type: Literal["call", "put"]
+    contracts: int
+    avg_premium: float
+    mark: float
+    market_value: float
+    unrealized_pnl: float
+
+
+class OptionsTradeBody(BaseModel):
+    profile: str = Field(default="default", max_length=64)
+    underlying: str = Field(..., min_length=1, max_length=16)
+    expiry: str = Field(..., min_length=8, max_length=16, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    strike: float = Field(..., gt=0)
+    option_type: Literal["call", "put"] = "call"
+    contracts: int = Field(default=1, ge=1, le=100)
+    action: Literal["buy_to_open", "sell_to_open", "sell_to_close", "buy_to_close"] | None = None
+    recommendation: Literal["BUY_CALL", "BUY_PUT", "SELL_PREMIUM"] | None = None
+
+    @model_validator(mode="after")
+    def require_action_or_recommendation(self) -> OptionsTradeBody:
+        if self.action is None and self.recommendation is None:
+            raise ValueError("Provide action or recommendation")
+        return self
+
+
+class OptionsTradeResponse(BaseModel):
+    status: str
+    broker_order_id: str
+    filled_contracts: int
+    avg_premium: float
+    underlying: str
+    expiry: str
+    strike: float
+    option_type: str
+    action: str
+    detail: str | None = None
+
+
+class OptionsPositionsResponse(BaseModel):
+    profile: str
+    cash: float
+    equity: float
+    positions: list[OptionsPositionRow]

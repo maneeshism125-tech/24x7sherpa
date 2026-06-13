@@ -10,6 +10,15 @@ from typing import Any, Literal
 
 from sherpa.config import Settings, get_settings
 from sherpa.execution.base import AccountSummary, OrderRequest, OrderResult, OrderSide
+from sherpa.execution.paper_options import (
+    OptionsAction,
+    OptionType,
+    list_option_positions,
+    options_equity,
+    refresh_all_option_marks,
+    refresh_option_mark_from_chain,
+    submit_options_trade,
+)
 from sherpa.execution.simulation_paths import (
     legacy_paper_portfolio_path,
     simulation_portfolio_path,
@@ -30,7 +39,9 @@ class PaperBroker:
     settings: Settings = field(default_factory=get_settings)
     cash: float = 100_000.0
     positions: dict[str, int] = field(default_factory=dict)
+    option_positions: dict[str, dict[str, Any]] = field(default_factory=dict)
     _last_prices: dict[str, float] = field(default_factory=dict)
+    option_last_prices: dict[str, float] = field(default_factory=dict)
     open_orders: list[dict[str, Any]] = field(default_factory=list)
     _meta: dict = field(default_factory=dict)
     _state_path: Path = field(init=False, repr=False)
@@ -51,7 +62,7 @@ class PaperBroker:
                 self._load_from_path(legacy)
                 self._save()
             else:
-                self._meta = {"starting_cash": self.cash, "schema_version": 2}
+                self._meta = {"starting_cash": self.cash, "schema_version": 3}
                 self._save()
 
     def _load_from_path(self, path: Path) -> None:
@@ -63,17 +74,25 @@ class PaperBroker:
         self._last_prices = {
             str(k).upper(): float(v) for k, v in raw.get("last_prices", {}).items()
         }
+        self.option_positions = {
+            str(k): dict(v) for k, v in (raw.get("option_positions") or {}).items()
+        }
+        self.option_last_prices = {
+            str(k): float(v) for k, v in (raw.get("option_last_prices") or {}).items()
+        }
         self.open_orders = list(raw.get("open_orders") or [])
         self._meta = dict(raw.get("meta") or {})
         if "starting_cash" not in self._meta:
             self._meta["starting_cash"] = self.cash
-        self._meta.setdefault("schema_version", 2)
+        self._meta.setdefault("schema_version", 3)
 
     def _save(self) -> None:
         payload = {
             "cash": self.cash,
             "positions": self.positions,
             "last_prices": self._last_prices,
+            "option_positions": self.option_positions,
+            "option_last_prices": self.option_last_prices,
             "open_orders": self.open_orders,
             "meta": self._meta,
         }
@@ -105,10 +124,17 @@ class PaperBroker:
             return price * (1 + bps)
         return price * (1 - bps)
 
+    def _slip_option_premium(self, premium: float, action: OptionsAction) -> float:
+        bps = self.settings.default_slippage_bps / 10_000.0
+        if action in ("buy_to_open", "buy_to_close"):
+            return premium * (1 + bps)
+        return premium * (1 - bps)
+
     def get_account(self) -> AccountSummary:
-        equity = self.cash + sum(
+        stock_mkt = sum(
             self._last_prices.get(s, 0.0) * q for s, q in self.positions.items()
         )
+        equity = self.cash + stock_mkt + options_equity(self)
         return AccountSummary(equity=equity, cash=self.cash, buying_power=self.cash)
 
     def _fill_market(
@@ -350,3 +376,47 @@ class PaperBroker:
     def refresh_symbol_from_last(self, symbol: str, last: float) -> None:
         """Update quote and attempt to fill working orders (does not change holdings itself)."""
         self.set_last_price(symbol, last)
+
+    def submit_options_paper_order(
+        self,
+        *,
+        underlying: str,
+        expiry: str,
+        strike: float,
+        option_type: OptionType,
+        action: OptionsAction,
+        contracts: int,
+        premium: float | None = None,
+    ) -> OrderResult:
+        return submit_options_trade(
+            self,
+            underlying=underlying,
+            expiry=expiry,
+            strike=strike,
+            option_type=option_type,
+            action=action,
+            contracts=contracts,
+            premium=premium,
+        )
+
+    def list_option_positions(self) -> list[dict[str, Any]]:
+        return list_option_positions(self)
+
+    def refresh_option_marks(self) -> int:
+        return refresh_all_option_marks(self)
+
+    def refresh_option_mark(
+        self,
+        *,
+        underlying: str,
+        expiry: str,
+        strike: float,
+        option_type: OptionType,
+    ) -> float:
+        return refresh_option_mark_from_chain(
+            self,
+            underlying=underlying,
+            expiry=expiry,
+            strike=strike,
+            option_type=option_type,
+        )

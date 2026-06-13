@@ -8,6 +8,7 @@ from sherpa.cli_settings import resolve_settings
 from sherpa.execution.base import OrderSide
 from sherpa.execution.factory import create_broker
 from sherpa.execution.paper import PaperBroker
+from sherpa.execution.paper_options import recommendation_to_action
 from sherpa.execution.simulation import read_paper_simulation_state, reset_paper_simulation
 from sherpa.execution.simulation_paths import simulation_portfolio_path, simulation_profile_slug
 from sherpa.providers import create_news_provider, create_price_provider
@@ -22,6 +23,10 @@ from api.schemas import (
     DailyPickRow,
     DailyRecommendationsResponse,
     OpenOrderRow,
+    OptionsPositionRow,
+    OptionsPositionsResponse,
+    OptionsTradeBody,
+    OptionsTradeResponse,
     PaperTickBody,
     PickCriteriaBody,
     PositionRow,
@@ -92,10 +97,22 @@ def service_simulation_status(*, profile: str) -> SimulationStatusResponse | Non
     cash = float(raw.get("cash", 0))
     positions_map = {str(k).upper(): int(v) for k, v in raw.get("positions", {}).items()}
     last_prices = {str(k).upper(): float(v) for k, v in raw.get("last_prices", {}).items()}
+    option_positions = raw.get("option_positions") or {}
+    option_last_prices = {str(k): float(v) for k, v in (raw.get("option_last_prices") or {}).items()}
     meta = raw.get("meta") or {}
     start = float(meta.get("starting_cash", cash))
-    mkt = sum(last_prices.get(s, 0.0) * q for s, q in positions_map.items())
-    equity = cash + mkt
+    stock_mkt = sum(last_prices.get(s, 0.0) * q for s, q in positions_map.items())
+    opt_mkt = 0.0
+    for key, pos in option_positions.items():
+        signed = int(pos.get("contracts", 0))
+        if signed == 0:
+            continue
+        mark = option_last_prices.get(key, float(pos.get("avg_premium", 0.0)))
+        if signed > 0:
+            opt_mkt += mark * 100 * signed
+        else:
+            opt_mkt -= mark * 100 * abs(signed)
+    equity = cash + stock_mkt + opt_mkt
     pnl = equity - start
     pos_rows = [
         PositionRow(
@@ -220,6 +237,97 @@ def service_paper_tick(body: PaperTickBody) -> dict:
         "symbol": sym,
         "last": last,
         "working_orders": len(br.list_open_orders()),
+    }
+
+
+def _resolve_options_trade(body: OptionsTradeBody) -> tuple[str, str]:
+    option_type = body.option_type
+    if body.action is not None:
+        return body.action, option_type
+    rec = body.recommendation
+    if rec is None:
+        raise ValueError("Provide action or recommendation")
+    if rec == "BUY_CALL":
+        option_type = "call"
+    elif rec == "BUY_PUT":
+        option_type = "put"
+    elif rec == "SELL_PREMIUM":
+        option_type = "call"
+    action = recommendation_to_action(rec, option_type)  # type: ignore[arg-type]
+    return action, option_type
+
+
+def service_trade_options_paper(body: OptionsTradeBody) -> OptionsTradeResponse:
+    settings = resolve_settings(profile=(body.profile or "default").strip() or "default")
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    action, option_type = _resolve_options_trade(body)
+    if not body.expiry or not body.strike:
+        raise ValueError("expiry and strike are required")
+    res = br.submit_options_paper_order(
+        underlying=body.underlying.upper().strip(),
+        expiry=body.expiry,
+        strike=body.strike,
+        option_type=option_type,  # type: ignore[arg-type]
+        action=action,  # type: ignore[arg-type]
+        contracts=body.contracts,
+    )
+    return OptionsTradeResponse(
+        status=res.status,
+        broker_order_id=res.broker_order_id,
+        filled_contracts=res.filled_qty,
+        avg_premium=float(res.avg_fill_price or 0),
+        underlying=body.underlying.upper().strip(),
+        expiry=body.expiry,
+        strike=body.strike,
+        option_type=option_type,
+        action=action,
+        detail="Paper options fill at chain mid ± slippage. Not real brokerage execution.",
+    )
+
+
+def service_options_paper_positions(*, profile: str) -> OptionsPositionsResponse:
+    settings = resolve_settings(profile=profile)
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    acct = br.get_account()
+    rows = [
+        OptionsPositionRow(
+            position_key=r["position_key"],
+            underlying=r["underlying"],
+            expiry=r["expiry"],
+            strike=r["strike"],
+            option_type=r["option_type"],
+            contracts=r["contracts"],
+            avg_premium=r["avg_premium"],
+            mark=r["mark"],
+            market_value=r["market_value"],
+            unrealized_pnl=r["unrealized_pnl"],
+        )
+        for r in br.list_option_positions()
+    ]
+    return OptionsPositionsResponse(
+        profile=simulation_profile_slug(settings.simulation_profile),
+        cash=acct.cash,
+        equity=acct.equity,
+        positions=rows,
+    )
+
+
+def service_options_paper_refresh_marks(*, profile: str) -> dict:
+    settings = resolve_settings(profile=profile)
+    br = create_broker("paper", settings)
+    if not isinstance(br, PaperBroker):
+        raise RuntimeError("expected paper broker")
+    n = br.refresh_option_marks()
+    acct = br.get_account()
+    return {
+        "ok": True,
+        "marks_updated": n,
+        "equity": acct.equity,
+        "cash": acct.cash,
     }
 
 

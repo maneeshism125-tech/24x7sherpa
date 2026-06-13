@@ -16,10 +16,12 @@ def reset_paper_simulation(settings: Settings, *, starting_cash: float) -> Path:
         "cash": float(starting_cash),
         "positions": {},
         "last_prices": {},
+        "option_positions": {},
+        "option_last_prices": {},
         "open_orders": [],
         "meta": {
             "starting_cash": float(starting_cash),
-            "schema_version": 2,
+            "schema_version": 3,
             "reset_at": datetime.now(timezone.utc).isoformat(),
         },
     }

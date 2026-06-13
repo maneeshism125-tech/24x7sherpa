@@ -31,12 +31,12 @@ export function LoginView({ onCreateAccount }: Props) {
                 Create account
               </button>
               . The first server user is still               <code className="text-slate-800">admin</code> /{" "}
-              <code className="text-slate-800">changeme</code> unless bootstrap password is set.
+              <code className="text-slate-800">password</code> unless bootstrap password is set.
             </>
           ) : (
             <>
               Public signup is turned off — use an account from your administrator. First deploy:{" "}
-              <code className="text-slate-800">admin</code> / <code className="text-slate-800">changeme</code>{" "}
+              <code className="text-slate-800">admin</code> / <code className="text-slate-800">password</code>{" "}
               unless <code className="text-slate-800">SHERPA_BOOTSTRAP_ADMIN_PASSWORD</code> is set.
             </>
           )}

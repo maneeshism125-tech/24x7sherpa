@@ -92,6 +92,7 @@ function formatMoney(n: number) {
 
 export default function App() {
   const { ready, authRequired, user, err: authErr, logout } = useAuth();
+  const apiEnabled = ready && (!authRequired || Boolean(user));
   const [page, setPage] = useState<AppPage>("main");
   const [mainTab, setMainTab] = useState<MainTab>("portfolio");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("criteria");
@@ -172,13 +173,16 @@ export default function App() {
   }, [profile]);
 
   useEffect(() => {
+    if (!apiEnabled) return;
+    setErr(null);
     void loadStatus().catch(() => setSim(null));
     void loadAccount().catch(() => setAcct(null));
-  }, [loadAccount, loadStatus]);
+  }, [apiEnabled, loadAccount, loadStatus]);
 
   useEffect(() => {
+    if (!apiEnabled) return;
     void loadOpenOrders();
-  }, [loadOpenOrders]);
+  }, [apiEnabled, loadOpenOrders]);
 
   useEffect(() => {
     setUniverseRefresh(pickCriteria.universe_id);

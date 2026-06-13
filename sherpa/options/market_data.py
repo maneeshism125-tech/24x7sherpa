@@ -45,6 +45,37 @@ def fetch_options_chain(symbol: str, expiration: str) -> tuple[pd.DataFrame, pd.
     return chain.calls.copy(), chain.puts.copy()
 
 
+def fetch_option_mid_price(
+    symbol: str,
+    expiration: str,
+    strike: float,
+    option_type: str,
+) -> float:
+    """Mid price per share (multiply by 100 for one contract)."""
+    calls, puts = fetch_options_chain(symbol, expiration)
+    df = calls if option_type.lower() == "call" else puts
+    if df.empty:
+        raise ValueError(f"No {option_type} chain for {symbol} {expiration}")
+    match = df[df["strike"] == strike]
+    if match.empty:
+        df = df.copy()
+        df["dist"] = (df["strike"] - strike).abs()
+        match = df.nsmallest(1, "dist")
+    row = match.iloc[0]
+    bid = float(row.get("bid") or 0)
+    ask = float(row.get("ask") or 0)
+    if bid > 0 and ask > 0:
+        return round((bid + ask) / 2, 4)
+    if ask > 0:
+        return round(ask, 4)
+    if bid > 0:
+        return round(bid, 4)
+    last = row.get("lastPrice")
+    if last is not None and pd.notna(last) and float(last) > 0:
+        return round(float(last), 4)
+    raise ValueError(f"No quote for {symbol} {expiration} {strike} {option_type}")
+
+
 def pick_nearest_expiry(expirations: list[str], min_days: int = 14, max_days: int = 45) -> str | None:
     if not expirations:
         return None

@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply min-h-screen bg-white text-slate-800 antialiased;
+}
+
+.glass {
+  @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+}
+
+.btn-primary {
+  @apply rounded-xl bg-mint-500 px-4 py-2.5 font-medium text-night-950 transition hover:bg-mint-400 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-ghost {
+  @apply rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-50;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 outline-none ring-mint-500/30 placeholder:text-slate-400 focus:border-mint-500 focus:ring-2;
+}
